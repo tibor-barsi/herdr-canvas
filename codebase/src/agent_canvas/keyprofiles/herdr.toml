@@ -17,6 +17,7 @@ description = "Herdr's navigation keys plus the canvas's own keys"
 "space.select:7" = ["Ctrl+Alt+7"]
 "space.select:8" = ["Ctrl+Alt+8"]
 "space.select:9" = ["Ctrl+Alt+9"]
+"machine.fold" = ["Alt+f"]
 "tab.next" = ["Ctrl+PageDown", "Ctrl+Tab", "Alt+]", "Ctrl+Alt+ArrowRight"]
 "tab.prev" = ["Ctrl+PageUp", "Ctrl+Shift+Tab", "Alt+[", "Ctrl+Alt+ArrowLeft"]
 "tab.select:1" = ["Alt+1", "Ctrl+1"]

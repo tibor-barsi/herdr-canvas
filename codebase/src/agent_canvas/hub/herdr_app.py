@@ -21,16 +21,16 @@ COLORS = {
 FOCUS_KEYS = {"space": "space", "tab": "tab", "pane": "focused_pane"}
 
 
-def _tree(node: Any) -> dict[str, Any] | None:
+def _tree(node: Any, prefix: str = "") -> dict[str, Any] | None:
     """Reduce a core layout node to ``{pane, weight}`` leaves and ``{dir, weight, children}``."""
     if not isinstance(node, dict):
         return None
     weight = (node.get("size") or {}).get("weight", 1)
     if node.get("type") == "block":
-        return {"pane": node["id"], "weight": weight}
+        return {"pane": prefix + node["id"], "weight": weight}
     if node.get("type") not in ("row", "column"):
         return None
-    children = [_tree(c) for c in node.get("children", [])]
+    children = [_tree(c, prefix) for c in node.get("children", [])]
     if not children or None in children:
         return None
     return {"dir": node["type"], "weight": weight, "children": children}
@@ -91,6 +91,10 @@ class HerdrApp:
             "other": [],
         }  # the snapshot the windows were last sent
         self._pids: dict[str, int] = {}  # terminal -> pid of its foreground program
+        self._homes: dict[str, str] = {}  # machine -> its home folder
+        self._remote: dict[
+            str, tuple[int, str | None]
+        ] = {}  # terminal -> (pid, session)
 
     def snapshot(self) -> dict[str, Any]:
         """Return the ``herdr`` view; ``available`` is false if Herdr is silent."""
@@ -102,16 +106,29 @@ class HerdrApp:
             return {"available": False, "focus": None, "spaces": [], "other": known}
         view = self._read(self.config_dir / "view.json").get("tabs", {})
         colors = self._read(self.config_dir / "shared.json").get("space.colors", {})
-        roots = self._roots()
+        roots = self._roots(self._read(self.docs_path))
+        machines = self._machines()
+        online = {m["name"] for m in machines if m["state"] == "online"}
+        remote_roots: dict[str, Any] = {}
         paired: set[str] = set()
         spaces = []
         for space in tree.get("spaces", []):
+            machine = space.get("machine")
+            if machine in online and machine not in remote_roots:
+                remote_roots[machine] = self._remote_roots(machine)
             tabs = []
             for tab in space.get("tabs", []):
                 focused = view.get(tab["id"], {}).get("focused")
                 panes = []
                 for t in tab.get("terminals", []):
-                    session = self._session(t["terminal"], t.get("app"))
+                    if machine is None:
+                        session = self._session(t["terminal"], t.get("app"))
+                    elif machine in online:
+                        session = self._remote_session(
+                            machine, t["terminal"], t.get("app")
+                        )
+                    else:
+                        session = None
                     if session:
                         paired.add(session)
                     panes.append(
@@ -131,14 +148,18 @@ class HerdrApp:
                     "active": bool(tab.get("active")),
                     "panes": panes,
                 }
-                tree = _tree(roots.get(tab["id"]))
-                if tree and set(_leaves(tree)) == {p["pane"] for p in panes}:
-                    entry["tree"] = tree
+                node = roots if machine is None else remote_roots.get(machine, {})
+                split = _tree(
+                    node.get(tab["id"]), "" if machine is None else f"{machine}/"
+                )
+                if split and set(_leaves(split)) == {p["pane"] for p in panes}:
+                    entry["tree"] = split
                 tabs.append(entry)
             token = colors.get(space["id"], DEFAULT_COLOR)
             spaces.append(
                 {
                     "id": space["id"],
+                    "machine": machine,
                     "name": space.get("name"),
                     "color": COLORS.get(token, COLORS[DEFAULT_COLOR]),
                     "active": bool(space.get("active")),
@@ -149,6 +170,7 @@ class HerdrApp:
             "available": True,
             "focus": {key: status.get(name) for key, name in FOCUS_KEYS.items()},
             "spaces": spaces,
+            "machines": machines,
             "other": [s for s in self.known_sessions() if s not in paired],
         }
 
@@ -235,14 +257,79 @@ class HerdrApp:
             self._pids[terminal] = pid
         return self._read(self.sessions_dir / f"{pid}.json").get("sessionId")
 
-    def _roots(self) -> dict[str, Any]:
-        """Return the split root of every tab, by tab id."""
-        spaces = self._read(self.docs_path).get("herdr-app", {}).get("value", {})
+    @staticmethod
+    def _roots(docs: dict[str, Any], prefix: str = "") -> dict[str, Any]:
+        """Return the split root of every tab of a ``docs.json``, by prefixed tab id."""
+        spaces = docs.get("herdr-app", {}).get("value", {})
         return {
-            t["id"]: t.get("root")
+            prefix + t["id"]: t.get("root")
             for s in spaces.get("spaces", [])
             for t in s.get("tabs", [])
         }
+
+    def _machines(self) -> list[dict[str, Any]]:
+        """Return the non-temporary Herdr machines, online when Herdr says connected."""
+        try:
+            listed = self._json([self.core, "machine", "ls", "--json"])["machines"]
+        except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError):
+            return []
+        return [
+            {
+                "name": m["name"],
+                "state": "online" if m.get("state") == "connected" else "offline",
+                "detail": None,
+                "other": [],
+            }
+            for m in sorted(listed, key=lambda m: m["name"])
+            if not m.get("temporary")
+        ]
+
+    def _home(self, machine: str) -> str | None:
+        if machine not in self._homes:
+            try:
+                home = self._run(
+                    [self.core, "exec", "--on", machine, "printenv", "HOME"]
+                )
+            except (OSError, subprocess.SubprocessError):
+                return None
+            self._homes[machine] = home.strip()
+        return self._homes[machine]
+
+    def _remote_file(self, machine: str, path: str) -> dict[str, Any]:
+        try:
+            data = self._json([self.core, "file", "read", "--on", machine, path])
+        except (OSError, subprocess.SubprocessError, ValueError):
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    def _remote_roots(self, machine: str) -> dict[str, Any]:
+        home = self._home(machine)
+        if not home:
+            return {}
+        docs = self._remote_file(
+            machine, f"{home}/.local/state/herdr-core/default/docs.json"
+        )
+        return self._roots(docs, f"{machine}/")
+
+    def _remote_session(
+        self, machine: str, terminal: str, app: str | None
+    ) -> str | None:
+        """Pair a remote terminal; the pid the core reports is current, so only a new pid reads the file."""
+        if not app:
+            return None
+        try:
+            pid = self._json([self.core, "get", terminal, "--json"])["foreground"][
+                "pid"
+            ]
+        except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError):
+            return None
+        if self._remote.get(terminal, (None,))[0] != pid:
+            home = self._home(machine)
+            if not home:
+                return None
+            data = self._remote_file(machine, f"{home}/.claude/sessions/{pid}.json")
+            self._remote[terminal] = (pid, data.get("sessionId"))
+        return self._remote[terminal][1]
 
     def _run(self, argv: list[str]) -> str:
         return subprocess.run(

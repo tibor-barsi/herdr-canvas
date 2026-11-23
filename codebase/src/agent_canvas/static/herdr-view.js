@@ -5,7 +5,11 @@
 // Each card with a session holds an empty `.hv-frame` (data-session, data-page); the
 // card and its frame survive updates as long as pane and session stay the same, so the
 // host can keep an iframe in it. callbacks.onFrame(slot, sessionId, page) fires after
-// each update for every card with a session.
+// each update for every card with a session whose machine is reachable.
+// With `herdr.machines` (one entry per remote machine: name, state, detail, other) the
+// sidebar groups spaces under machine headings, this computer first; a machine that is not
+// online shows its detail, and its cards a note instead of a frame.
+// callbacks.onMachineOnline(name, sessionIds) fires when a machine's state changes to online.
 const HerdrView = (() => {
   const EMPTY = { available: false, focus: null, spaces: [], other: [] };
 
@@ -60,13 +64,16 @@ const HerdrView = (() => {
     if (kids.length < 2) return kids[0] && { ...kids[0], weight: node.weight };
     return { ...node, children: kids };
   }
+  const AWAY = { offline: 'is offline', connecting: 'is connecting', 'no-canvas': 'has no canvas here', 'port-clash': 'cannot be shown here' };
   const pageName = (p) => p.replace(/\.[^.]+$/, '');
 
   function mount(root, cb = {}) {
     let herdr = EMPTY;
     let sessions = new Map();
     let lastFocus = null;
-    let sel = { space: null, tab: null, pane: null, other: false, otherSession: null };
+    let sel = { space: null, tab: null, pane: null, other: false, otherSession: null, otherMachine: null };
+    let lastStates = new Map(); // machine name -> state at the last update
+    const folded = new Set(JSON.parse(localStorage.getItem('hv.folded') || '[]')); // folded machine groups (null: this computer)
     const pages = new Map(); // session id -> {page, seen}: a page tab clicked, until the hub confirms
     const cards = new Map(); // card key -> {el, head, tabs, frame}
 
@@ -87,7 +94,33 @@ const HerdrView = (() => {
     }, { passive: false });
 
     const spaceOf = (id) => herdr.spaces.find((s) => s.id === id);
-    const others = () => herdr.other.filter((id) => sessions.has(id));
+    const machineList = () => herdr.machines || [];
+    const grouped = () => machineList().length > 0;
+    const machineNamed = (name) => machineList().find((m) => m.name === name);
+    // Machine groups in sidebar order: this computer (null), then the given order.
+    const groupNames = () => {
+      const names = machineList().map((m) => m.name);
+      for (const s of herdr.spaces) if (s.machine && !names.includes(s.machine)) names.push(s.machine);
+      return grouped() ? [null, ...names] : [null];
+    };
+    const away = (name) => {
+      const m = machineNamed(name);
+      return m && m.state !== 'online' ? m : null;
+    };
+    const inGroup = (space, name) => !grouped() || (space.machine ?? null) === name;
+    const othersOf = (name) => (name ? machineNamed(name)?.other || [] : herdr.other).filter((id) => sessions.has(id));
+    const others = () => othersOf(sel.otherMachine);
+    // The sidebar's rows in order: spaces of a group, then its "Not in Herdr" row.
+    const rowList = () => groupNames().flatMap((name) => [
+      ...herdr.spaces.filter((s) => inGroup(s, name)).map((s) => ({ space: s.id, machine: name })),
+      ...(othersOf(name).length ? [{ other: true, machine: name }] : []),
+    ]);
+    function setFold(name, on) {
+      if (folded.has(name) === on) return;
+      if (on) folded.add(name);
+      else folded.delete(name);
+      localStorage.setItem('hv.folded', JSON.stringify([...folded]));
+    }
     const pagesIn = (ids) => ids.reduce((n, id) => n + (sessions.get(id)?.pages.length || 0), 0);
     const sessionIds = (panes) => panes.map((p) => p.session).filter((id) => id && sessions.has(id));
 
@@ -121,7 +154,7 @@ const HerdrView = (() => {
       toggle.onclick = () => root.classList.toggle('folded');
       head.append(h('span', 'hv-logo'), h('span', null, 'Canvas'), h('span', 'hv-grow'), toggle);
       const rows = h('div', 'hv-rows');
-      for (const space of herdr.spaces) {
+      const spaceRow = (space) => {
         const panes = panesOf(space.tabs);
         const row = h('div', 'hv-row' + (!sel.other && space.id === sel.space ? ' on' : ''));
         row.title = space.name;
@@ -133,15 +166,31 @@ const HerdrView = (() => {
         const mark = statusMark(worst(panes.map((p) => p.status)));
         if (mark) row.append(mark);
         row.onclick = () => pick({ space: space.id, other: false }, () => cb.onSpace?.(space.id));
-        rows.append(row);
-      }
-      const rest = others();
-      if (rest.length) {
-        const row = h('div', 'hv-row' + (sel.other ? ' on' : ''));
+        return row;
+      };
+      const otherRow = (name) => {
+        const row = h('div', 'hv-row' + (sel.other && sel.otherMachine === name ? ' on' : ''));
         row.title = 'Not in Herdr';
-        row.append(h('i', 'hv-tile other', '?'), h('span', 'hv-name hv-m', 'Not in Herdr'), h('span', 'hv-grow'), h('span', 'hv-cnt', pagesIn(rest)));
-        row.onclick = () => pick({ other: true }, () => cb.onOther?.(sel.otherSession));
-        rows.append(row);
+        row.append(h('i', 'hv-tile other', '?'), h('span', 'hv-name hv-m', 'Not in Herdr'), h('span', 'hv-grow'), h('span', 'hv-cnt', pagesIn(othersOf(name))));
+        row.onclick = () => pick({ other: true, otherMachine: name }, () => cb.onOther?.(sel.otherSession));
+        return row;
+      };
+      for (const name of groupNames()) {
+        if (grouped()) {
+          const m = machineNamed(name);
+          const head = h('div', 'hv-mhead');
+          head.dataset.machine = name ?? '';
+          head.title = name ?? 'This computer';
+          head.append(h('span', 'hv-name', name ?? 'This computer'), h('span', 'hv-grow'));
+          if (m && m.state !== 'online') head.append(h('span', 'hv-mstate', m.state.replace('-', ' ')));
+          head.append(h('span', 'hv-chev' + (folded.has(name) ? ' shut' : '')));
+          head.onclick = () => { setFold(name, !folded.has(name)); render(); };
+          rows.append(head);
+          if (m && m.state !== 'online' && m.detail) rows.append(h('div', 'hv-mnote', m.detail));
+          if (folded.has(name)) continue;
+        }
+        for (const space of herdr.spaces) if (inGroup(space, name)) rows.append(spaceRow(space));
+        if (othersOf(name).length) rows.append(otherRow(name));
       }
       side.replaceChildren(head, h('div', 'hv-sec', 'Spaces'), rows);
     }
@@ -184,7 +233,7 @@ const HerdrView = (() => {
       return c;
     }
 
-    function fill(c, { name, app, status, focus, session, onFocus }) {
+    function fill(c, { name, app, status, focus, session, machine, onFocus }) {
       c.el.classList.toggle('focus', focus);
       c.head.replaceChildren();
       if (app === 'claude-code') c.head.append(icon('hv-claude'));
@@ -193,6 +242,14 @@ const HerdrView = (() => {
       if (mark) c.head.append(mark);
       c.select = onFocus;
       c.tabs.replaceChildren();
+      const gone = away(machine);
+      const want = session && !gone ? 'hv-frame' : 'hv-none';
+      if (c.frame.className !== want) {
+        const frame = h('div', want);
+        c.el.replaceChild(frame, c.frame);
+        c.frame = frame;
+      }
+      if (want === 'hv-none') c.frame.textContent = gone ? gone.detail || `${gone.name} ${AWAY[gone.state] || gone.state}` : 'no canvas';
       if (!session) return;
       c.el.dataset.session = session.id;
       const shown = pages.get(session.id)?.page || session.active_page;
@@ -206,23 +263,27 @@ const HerdrView = (() => {
         };
         c.tabs.append(pt);
       }
-      c.frame.dataset.session = session.id;
-      c.frame.dataset.page = shown || '';
+      if (want === 'hv-frame') {
+        c.frame.dataset.session = session.id;
+        c.frame.dataset.page = shown || '';
+      }
     }
 
     function renderCards() {
       const wanted = [];
       if (sel.other) {
         const s = sessions.get(sel.otherSession);
-        if (s) wanted.push({ key: 'o:' + s.id, name: s.title, focus: true, session: s });
+        if (s) wanted.push({ key: 'o:' + s.id, name: s.title, focus: true, session: s, machine: sel.otherMachine });
       } else {
-        const tab = spaceOf(sel.space).tabs.find((t) => t.id === sel.tab);
+        const space = spaceOf(sel.space);
+        const tab = space.tabs.find((t) => t.id === sel.tab);
         const rects = layout(tab || { panes: [] });
         for (const p of (tab?.panes || []).filter(isAgent)) {
           const session = sessions.get(p.session);
           wanted.push({
             rect: rects.get(p.pane),
             key: p.terminal + '|' + (session?.id || ''), name: p.name, app: p.app, status: p.status, session,
+            machine: space.machine ?? null,
             focus: p.terminal === sel.pane,
             onFocus: () => pick({ pane: p.terminal }, () => cb.onPane?.(p.terminal)),
           });
@@ -246,7 +307,7 @@ const HerdrView = (() => {
           width: `calc((100% - 8px) * ${r.w} - 6px)`, height: `calc((100% - 8px) * ${r.h} - 6px)`,
         });
         area.append(c.el); // appending in order also reorders kept cards
-        if (w.session) cb.onFrame?.(c.frame, w.session.id, c.frame.dataset.page);
+        if (w.session && c.frame.classList.contains('hv-frame')) cb.onFrame?.(c.frame, w.session.id, c.frame.dataset.page);
       }
     }
 
@@ -258,6 +319,9 @@ const HerdrView = (() => {
 
     function update(next, list) {
       herdr = next || EMPTY;
+      const states = new Map(machineList().map((m) => [m.name, m.state]));
+      const back = [...states].filter(([n, st]) => st === 'online' && lastStates.has(n) && lastStates.get(n) !== 'online').map(([n]) => n);
+      lastStates = states;
       sessions = new Map(list.map((s) => [s.id, s]));
       for (const [id, p] of pages) {
         if (sessions.get(id)?.active_page !== p.seen) pages.delete(id);
@@ -270,6 +334,7 @@ const HerdrView = (() => {
       }
       normalize();
       render();
+      for (const n of back) cb.onMachineOnline?.(n, [...sessions.values()].filter((x) => x.machine === n).map((x) => x.id));
     }
 
     // Select the card of a session the host opened; returns its pane, null when not in Herdr.
@@ -278,23 +343,38 @@ const HerdrView = (() => {
         for (const tab of space.tabs) {
           const pane = tab.panes.find((p) => p.session === id);
           if (pane) {
+            setFold(space.machine ?? null, false);
             pick({ space: space.id, tab: tab.id, pane: pane.terminal, other: false });
             return pane;
           }
         }
       }
-      if (others().includes(id)) pick({ other: true, otherSession: id });
+      const machine = groupNames().find((name) => othersOf(name).includes(id));
+      if (machine !== undefined) {
+        setFold(machine, false);
+        pick({ other: true, otherMachine: machine, otherSession: id });
+      }
       return null;
     }
 
     // ---- keyboard navigation: the same moves as the clicks, asking Herdr the same way ----
 
     function goSpace(delta, index) {
-      const rows = [...herdr.spaces.map((s) => s.id), ...(others().length ? ['other'] : [])];
-      const now = rows.findIndex((r) => (r === 'other' ? sel.other : !sel.other && r === sel.space));
+      const rows = rowList();
+      const now = rows.findIndex((r) => (r.other ? sel.other && sel.otherMachine === r.machine : !sel.other && r.space === sel.space));
       const to = rows[index ?? (now + delta + rows.length) % rows.length];
-      if (to === 'other') pick({ other: true }, () => cb.onOther?.(sel.otherSession));
-      else if (to) pick({ space: to, other: false }, () => cb.onSpace?.(to));
+      if (!to) return;
+      setFold(to.machine, false);
+      if (to.other) pick({ other: true, otherMachine: to.machine }, () => cb.onOther?.(sel.otherSession));
+      else pick({ space: to.space, other: false }, () => cb.onSpace?.(to.space));
+    }
+
+    // Fold or open the machine group of the shown space; false when the sidebar has no groups.
+    function foldMachine() {
+      if (!grouped()) return false;
+      const name = sel.other ? sel.otherMachine : spaceOf(sel.space)?.machine ?? null;
+      setFold(name, !folded.has(name));
+      render();
     }
 
     function goTab(delta, index) {
@@ -366,6 +446,7 @@ const HerdrView = (() => {
       update,
       show,
       goSpace,
+      foldMachine,
       goTab,
       goPane,
       goPage,

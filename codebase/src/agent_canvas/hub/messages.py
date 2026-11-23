@@ -20,7 +20,7 @@ _noted: set[str] = set()
 WINDOW_MESSAGES: dict[str, tuple[str, ...]] = {
     "hello": ("build", "version"),
     "tabs": ("sessions", "closed", "show"),
-    "herdr": ("available", "focus", "spaces", "other"),
+    "herdr": ("available", "focus", "spaces", "machines", "other"),
     "show": ("session", "page", "url", "tab"),
     "ask-opened": ("session", "tab"),
     "listening": ("session", "listening", "watching"),

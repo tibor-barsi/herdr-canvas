@@ -764,6 +764,7 @@ const view = HerdrView.mount(herdrRoot, {
   onOther: () => followView(),
   onPage: openPageOf,
   onFrame: placeFrame,
+  onMachineOnline: reloadMachine,
 });
 
 const herdrPanes = () => (herdr ? herdr.spaces.flatMap((s) => s.tabs.flatMap((t) => t.panes)) : []);
@@ -775,11 +776,14 @@ function sessionOrder() {
   return [...new Set(ids), ...tabs.map((t) => t.id).filter((id) => !ids.includes(id))];
 }
 
-// Every session no pane holds goes under "Not in Herdr", also before the hub's next poll.
+// Every session no pane holds goes under "Not in Herdr" of its machine, also before the hub's next poll.
 function drawView() {
   const paired = new Set(herdrPanes().map((p) => p.session));
-  const other = tabs.map((t) => t.id).filter((id) => !paired.has(id));
-  view.update({...(herdr || {available: false, focus: null, spaces: []}), other},
+  const loose = tabs.filter((t) => !paired.has(t.id));
+  const other = loose.filter((t) => !t.machine).map((t) => t.id);
+  const machines = ((herdr && herdr.machines) || []).map((m) => (
+    {...m, other: loose.filter((t) => t.machine === m.name).map((t) => t.id)}));
+  view.update({...(herdr || {available: false, focus: null, spaces: []}), other, machines},
     tabs.map((t) => ({...t, active_page: t.page})));
   followView();
 }
@@ -787,6 +791,20 @@ function drawView() {
 function onHerdr(message) {
   herdr = message;
   drawView();
+}
+
+// A machine is back online: its pages may have changed while it was away, so every frame
+// of its sessions loads again (the shown one now, kept ones when next shown).
+function reloadMachine(machine, ids) {
+  for (const slot of herdrRoot.querySelectorAll(".hv-frame")) {
+    const frame = slot.querySelector("iframe");
+    if (frame && ids.includes(slot.dataset.session)) frame.src = frame.getAttribute("src");
+  }
+  for (const record of Array.from(liveFrames.values())) {
+    if (!ids.includes(record.session)) continue;
+    if (record === active) reloadFrame();
+    else dropFrame(record);
+  }
 }
 
 function followView() {
@@ -911,6 +929,7 @@ const WINDOW_ACTIONS = {
   "space.next": () => view.goSpace(1),
   "space.prev": () => view.goSpace(-1),
   "space.select": (n) => view.goSpace(0, n - 1),
+  "machine.fold": () => view.foldMachine(),
   "tab.next": () => view.goTab(1),
   "tab.prev": () => view.goTab(-1),
   "tab.select": (n) => view.goTab(0, n - 1),
@@ -1252,7 +1271,7 @@ function onUpdate(message) {
 const HUB_MESSAGES = new Map([
   ["hello", {fields: ["build", "version"], handle: (m) => window.shellUpdate.onHello(m)}],
   ["tabs", {fields: ["sessions", "closed", "show"], handle: onTabs}],
-  ["herdr", {fields: ["available", "focus", "spaces", "other"], handle: onHerdr}],
+  ["herdr", {fields: ["available", "focus", "spaces", "machines", "other"], handle: onHerdr}],
   ["show", {fields: ["session", "page", "url", "tab"], handle: (m) => onShow(m, false)}],
   ["ask-opened", {fields: ["session", "tab"], handle: onAskOpened}],
   ["listening", {fields: ["session", "listening", "watching"],

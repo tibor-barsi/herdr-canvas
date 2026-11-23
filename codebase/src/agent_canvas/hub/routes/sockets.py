@@ -288,6 +288,8 @@ async def handle_shell_message(
     kind = message.get("type")
     row = SHELL_MESSAGES.get(kind) if isinstance(kind, str) else None
     note_unknown("from a window", message, None if row is None else row[0])
+    if svc.machines is not None and svc.machines.route(message):
+        return  # it names a session or page of another machine
     if row is not None:
         await row[1](websocket, message, svc, publish)
 

@@ -38,6 +38,7 @@ from agent_canvas.hub.events import EventService
 from agent_canvas.hub.headless import HeadlessRenderer
 from agent_canvas.hub.herdr_app import HerdrApp
 from agent_canvas.hub.looks import LookService
+from agent_canvas.hub.machines import MachineRouter, Machines
 from agent_canvas.hub.purge import PURGE_INTERVAL_SECONDS, purge
 from agent_canvas.hub.registry import (
     SessionRegistry,
@@ -350,6 +351,7 @@ def _with_light(
         "asks": asks.public(session_id),
         "result": results.public(session_id),
         "send": events.latest_send(session_id),
+        "machine": None,
     }
 
 
@@ -367,12 +369,16 @@ async def _lifespan(app: Starlette) -> AsyncIterator[None]:
     follows = services.registry.follow_file is not None
     purging = None if follows else asyncio.create_task(_purge_archived(services))
     herdr_poll = asyncio.create_task(_poll_herdr(services))
+    linking = asyncio.create_task(services.machines.run())
     try:
         yield
     finally:
         if purging:
             purging.cancel()
         herdr_poll.cancel()
+        linking.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await linking
         await services.watcher.close()
 
 
@@ -505,13 +511,20 @@ def create_app(
     )
     herdr_app = HerdrApp(known_sessions=lambda: [t["id"] for t in registry.tabs()])
     # A session closed in the daily hub still shows in the Herdr pane that holds it.
-    state.tabs_provider = lambda: [
-        _with_light(t, events, asks, results) for t in registry.tabs(herdr_app.paired())
-    ]
-    state.closed_provider = registry.closed_tabs
+    machines = Machines(state)
+    state.tabs_provider = lambda: (
+        [
+            _with_light(t, events, asks, results)
+            for t in registry.tabs(herdr_app.paired())
+        ]
+        + machines.tabs()
+    )
+    state.closed_provider = lambda: (
+        [{**t, "machine": None} for t in registry.closed_tabs()] + machines.closed()
+    )
 
     state.channel.register(
-        "herdr", lambda initial: {"type": "herdr", **herdr_app.last}, 0
+        "herdr", lambda initial: machines.herdr_view(herdr_app.last), 0
     )
     services = Services(
         state,
@@ -525,6 +538,7 @@ def create_app(
         answers,
         results,
         herdr_app=herdr_app,
+        machines=machines,
     )
     looks.answers_of = lambda session, page: answers_message(services, session, page)
     state.channel.register(
@@ -534,7 +548,10 @@ def create_app(
         "answers", lambda initial: build_answers_view(services, initial), 0
     )
     app = Starlette(
-        middleware=[Middleware(GuardMiddleware, state=state)],
+        middleware=[
+            Middleware(GuardMiddleware, state=state),
+            Middleware(MachineRouter, machines=machines),
+        ],
         routes=[
             *all_routes(services),
             Mount("/static", _FreshStaticFiles(directory=STATIC_DIR), name="static"),

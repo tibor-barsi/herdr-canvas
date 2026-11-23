@@ -18,6 +18,7 @@ const keyMap = (function () {
   add("space.next", "window", NAV, "next space (the last entry is Not in Herdr)");
   add("space.prev", "window", NAV, "previous space");
   for (let n = 1; n <= 9; n++) add(`space.select:${n}`, "window", NAV, `space ${n}`);
+  add("machine.fold", "window", NAV, "fold / open the machine group of the shown space");
   add("tab.next", "window", NAV, "next tab");
   add("tab.prev", "window", NAV, "previous tab");
   for (let n = 1; n <= 9; n++) add(`tab.select:${n}`, "window", NAV, `tab ${n}`);

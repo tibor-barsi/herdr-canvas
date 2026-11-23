@@ -16,6 +16,11 @@ back to the agent: clicks, drawings, comments and question cards.
   `<config dir>/keys/<name>.toml` (config dir: `~/.config/herdr-canvas` when
   started with `scripts/run-beside.sh`, else `~/.config/agent-canvas`), and the
   chosen profile is stored in `<config dir>/keys.toml`.
+- Other machines Herdr reaches over ssh show up in the sidebar under their own
+  heading, with their agents' canvases. Each machine runs its own canvas hub on a
+  port of its own (set `port` in that machine's `<config dir>/config.toml`, e.g.
+  27465); this hub opens an ssh forward to it on the same port number and logs in
+  by itself.
 
 Status: a prototype. It is derived from agent-canvas, a local canvas for coding
 agents, and still uses its `agent-canvas` command, plugin and file names.

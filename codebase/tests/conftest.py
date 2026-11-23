@@ -46,6 +46,10 @@ def no_real_herdr(
     fake = folder / "herdr-app"
     fake.write_text("#!/bin/sh\nexit 1\n")
     fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
+    # an `hc` that always fails: no hub links to the owner's other machines
+    core = folder / "hc"
+    core.write_text("#!/bin/sh\nexit 1\n")
+    core.chmod(core.stat().st_mode | stat.S_IXUSR)
     monkeypatch.setenv("PATH", f"{folder}:{os.environ['PATH']}")
     # without these no hook event names a pane, so no hub calls herdr or hyprctl
     for name in [n for n in os.environ if n.startswith("HERDR_")]:

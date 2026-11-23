@@ -24,11 +24,18 @@
 .hv-name{overflow:hidden;text-overflow:ellipsis}
 .hv-tile{width:18px;height:18px;border-radius:5px;flex:none;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;font-style:normal}
 .hv-tile.other{background:#3a3c40;color:#c9cacc}
+.hv-mhead{display:flex;align-items:center;gap:7px;height:26px;margin:4px 7px 0;padding:0 8px;font-size:11px;color:#9a9b9e;cursor:pointer;white-space:nowrap;overflow:hidden}
+.hv-mhead:hover{color:#e4e4e6}
+.hv-mstate{flex:none}
+.hv-chev{flex:none;width:5px;height:5px;margin:0 3px 3px;border:solid currentColor;border-width:0 1.5px 1.5px 0;transform:rotate(45deg)}
+.hv-chev.shut{margin:0 4px 0 2px;transform:rotate(-45deg)}
+.hv-mnote{margin:0 7px 3px;padding:0 8px;font-size:11px;line-height:1.35;color:#76777a}
 .hv-cnt{color:#9a9b9e;font-size:12px}
 .hv.folded .hv-side{width:52px}
-.hv.folded .hv-name,.hv.folded .hv-cnt,.hv.folded .hv-shead>span:not(.hv-fold),.hv.folded .hv-sec,.hv.folded .hv-row .hv-grow,.hv.folded .hv-row .hv-spin,.hv.folded .hv-row .hv-dot{display:none}
+.hv.folded .hv-mstate,.hv.folded .hv-mnote,.hv.folded .hv-chev,.hv.folded .hv-name,.hv.folded .hv-cnt,.hv.folded .hv-shead>span:not(.hv-fold),.hv.folded .hv-sec,.hv.folded .hv-row .hv-grow,.hv.folded .hv-row .hv-spin,.hv.folded .hv-row .hv-dot{display:none}
 .hv.folded .hv-shead{flex-direction:column;padding:12px 0;gap:12px;align-items:center}
 .hv.folded .hv-fold{margin:0}
+.hv.folded .hv-mhead{justify-content:center;padding:0;margin:4px 8px 0;border-top:1px solid #1c1e22;height:8px}
 .hv.folded .hv-row{justify-content:center;padding:6px 0;margin:1px 8px}
 .hv-main{flex:1;display:flex;flex-direction:column;min-width:0}
 .hv-bar{height:40px;display:flex;align-items:center;gap:6px;padding:0 8px;border-bottom:1px solid #1c1e22;flex:none;white-space:nowrap;overflow-x:auto;scrollbar-width:none}

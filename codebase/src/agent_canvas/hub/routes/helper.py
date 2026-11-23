@@ -19,6 +19,7 @@ from agent_canvas.hub.channel import WindowChannel
 from agent_canvas.hub.events import EventService
 from agent_canvas.hub.herdr_app import HerdrApp
 from agent_canvas.hub.looks import LookService
+from agent_canvas.hub.machines import Machines
 from agent_canvas.hub.registry import RegistryError, SessionRegistry
 from agent_canvas.hub.results import ResultService
 from agent_canvas.hub.state import HubState
@@ -43,6 +44,8 @@ class Services:
         The cards' answers per page (ANS-01).
     results : ResultService
         The result cards (RES-01).
+    machines : Machines | None
+        The links to other machines' hubs; None in tests that build no hub.
     changed_pages : collections.deque
         (session, page) pairs whose ``comments`` message is still to be built.
     changed_answers : collections.deque
@@ -62,6 +65,7 @@ class Services:
     changed_pages: deque[tuple[str, str]] = field(default_factory=deque)
     changed_answers: deque[tuple[str, str]] = field(default_factory=deque)
     herdr_app: HerdrApp = field(default_factory=HerdrApp)
+    machines: Machines | None = None
 
     @property
     def channel(self) -> WindowChannel:

@@ -34,6 +34,7 @@ def from_window(message: dict, svc: object = None) -> None:
 
     In a fresh thread: browser tests leave an event loop running in this one.
     """
+    svc = svc or SimpleNamespace(machines=None)  # no link to other machines
     coroutine = handle_shell_message(None, json.dumps(message), svc, None)
     with ThreadPoolExecutor(1) as pool:
         pool.submit(asyncio.run, coroutine).result()
@@ -52,7 +53,8 @@ def test_sec_09_an_unknown_type_from_the_window_is_logged_once_by_name(notes) ->
 def test_sec_09_an_unknown_field_is_logged_and_the_message_still_handled(notes) -> None:  # noqa: ANN001
     dismissed: list[str] = []
     svc = SimpleNamespace(
-        asks=SimpleNamespace(dismiss=lambda _s, a: dismissed.append(a) or True)
+        asks=SimpleNamespace(dismiss=lambda _s, a: dismissed.append(a) or True),
+        machines=None,
     )
     message = {"type": "ask-dismiss", "session": "s1", "ask": "a1", "extra": SECRET}
     for _ in range(2):
@@ -62,7 +64,9 @@ def test_sec_09_an_unknown_field_is_logged_and_the_message_still_handled(notes) 
 
 
 def test_sec_09_the_notes_stop_at_their_limit(notes) -> None:  # noqa: ANN001
-    svc = SimpleNamespace(asks=SimpleNamespace(dismiss=lambda _s, _a: True))
+    svc = SimpleNamespace(
+        asks=SimpleNamespace(dismiss=lambda _s, _a: True), machines=None
+    )
     from_window({"type": "ask-dismiss", "session": SECRET, "odd": SECRET}, svc)
     for n in range(messages.MAX_NOTES + 5):
         from_window({"type": f"made-up-{n}", "value": SECRET})

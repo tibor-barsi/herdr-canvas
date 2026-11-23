@@ -6,12 +6,14 @@ import asyncio
 import json
 import shutil
 import stat
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from agent_canvas.hub.herdr_app import HerdrApp, _tree as herdr_tree
+from agent_canvas.hub.herdr_app import HerdrApp
+from agent_canvas.hub.herdr_app import _tree as herdr_tree
 from agent_canvas.hub.routes import herdr as route
 
 pytestmark = pytest.mark.unit
@@ -26,7 +28,13 @@ esac
 """
 CORE = """#!/bin/sh
 cd "$(dirname "$0")"
-cat "hc_get_$2.json"
+echo "$@" >> hc.log
+case "$1" in
+  get) cat "hc_get_$(echo "$2" | tr / _).json" ;;
+  machine) cat machines.json ;;
+  exec) echo /remote/home ;;
+  file) cat "remote$(echo "$5" | tr / _)" ;;
+esac
 """
 
 
@@ -51,6 +59,7 @@ def herdr(tmp_path: Path) -> HerdrApp:
     sessions.mkdir()
     (sessions / "4242.json").write_text(json.dumps({"sessionId": "sess-a"}))
     (tmp_path / "proc" / "4242").mkdir(parents=True)
+    (bin_dir / "machines.json").write_text(json.dumps({"machines": []}))
     return HerdrApp(
         app=str(bin_dir / "herdr-app"),
         core=str(bin_dir / "hc"),
@@ -106,7 +115,11 @@ def test_hca_01_tab_carries_its_split_tree(herdr: HerdrApp) -> None:
         "weight": 1,
         "children": [
             {"pane": "p1", "weight": 1.0},
-            {"dir": "column", "weight": 2.0, "children": [{"pane": "p2", "weight": 3.0}]},
+            {
+                "dir": "column",
+                "weight": 2.0,
+                "children": [{"pane": "p2", "weight": 3.0}],
+            },
         ],
     }
     assert "tree" not in tabs[1]
@@ -116,7 +129,11 @@ def test_hca_01_real_single_pane_document(herdr: HerdrApp) -> None:
     """The real core document of a one-pane tab reduces to one leaf."""
     root = json.loads((FIXTURES / "docs_real.json").read_text())["herdr-app"]["value"]
     tree = herdr_tree(root["spaces"][0]["tabs"][0]["root"])
-    assert tree == {"dir": "row", "weight": 1, "children": [{"pane": "p76234a8347b52258276f561daa3f85ed", "weight": 1.0}]}
+    assert tree == {
+        "dir": "row",
+        "weight": 1,
+        "children": [{"pane": "p76234a8347b52258276f561daa3f85ed", "weight": 1.0}],
+    }
 
 
 def test_hca_01_other_holds_unpaired_sessions(herdr: HerdrApp) -> None:
@@ -171,7 +188,10 @@ class _Request:
 
 def _post(herdr: HerdrApp, body: object) -> tuple[int, list[str]]:
     svc = SimpleNamespace(herdr_app=herdr)
-    response = asyncio.run(route.focus(_Request(body), svc, lambda view: None))
+    coroutine = route.focus(_Request(body), svc, lambda view: None)
+    # In a fresh thread: browser tests leave an event loop running in this one.
+    with ThreadPoolExecutor(1) as pool:
+        response = pool.submit(asyncio.run, coroutine).result()
     log = Path(herdr.app).with_name("do.log")
     return response.status_code, log.read_text().splitlines() if log.exists() else []
 
@@ -221,3 +241,109 @@ def test_hca_01_focus_when_herdr_is_down(herdr: HerdrApp, tmp_path: Path) -> Non
     (tmp_path / "bin" / "status.json").write_text("")
     status, log = _post(herdr, {"terminal": "t2"})
     assert (status, log) == (503, [])
+
+
+def _add_remote(herdr: HerdrApp, tmp_path: Path, state: str = "connected") -> Path:
+    """Add a remote space on machine ``rm`` with one claude pane; return the bin folder."""
+    bin_dir = tmp_path / "bin"
+    ls = json.loads((bin_dir / "ls.json").read_text())
+    ls["spaces"].append(
+        {
+            "id": "rm/sp9",
+            "name": "far",
+            "machine": "rm",
+            "active": False,
+            "tabs": [
+                {
+                    "id": "rm/tb9",
+                    "name": "1",
+                    "active": True,
+                    "terminals": [
+                        {
+                            "terminal": "rm/t1",
+                            "pane": "rm/p9",
+                            "status": "idle",
+                            "app": "claude-code",
+                            "name": None,
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+    (bin_dir / "ls.json").write_text(json.dumps(ls))
+    machines = [
+        {"name": "rm", "state": state, "temporary": False},
+        {"name": "aa-tmp", "state": "connected", "temporary": True},
+    ]
+    (bin_dir / "machines.json").write_text(json.dumps({"machines": machines}))
+    (bin_dir / "hc_get_rm_t1.json").write_text(json.dumps({"foreground": {"pid": 77}}))
+    (bin_dir / "remote_remote_home_.claude_sessions_77.json").write_text(
+        json.dumps({"sessionId": "sess-r"})
+    )
+    root = {"type": "row", "children": [{"type": "block", "id": "p9"}]}
+    docs = {
+        "herdr-app": {"value": {"spaces": [{"tabs": [{"id": "tb9", "root": root}]}]}}
+    }
+    name = "remote_remote_home_.local_state_herdr-core_default_docs.json"
+    (bin_dir / name).write_text(json.dumps(docs))
+    return bin_dir
+
+
+def test_hca_01_remote_space_pairs_and_prefixes_tree(
+    herdr: HerdrApp, tmp_path: Path
+) -> None:
+    """A remote space has its machine, a paired session and a tree with prefixed ids."""
+    _add_remote(herdr, tmp_path)
+    snap = herdr.snapshot()
+    local, remote = snap["spaces"][0], snap["spaces"][2]
+    assert local["machine"] is None
+    assert remote["machine"] == "rm"
+    tab = remote["tabs"][0]
+    assert tab["panes"][0]["session"] == "sess-r"
+    assert tab["tree"] == {
+        "dir": "row",
+        "weight": 1,
+        "children": [{"pane": "rm/p9", "weight": 1}],
+    }
+    assert snap["other"] == ["sess-b"]
+    assert snap["machines"] == [
+        {"name": "rm", "state": "online", "detail": None, "other": []}
+    ]
+
+
+def test_hca_01_remote_color_is_keyed_by_prefixed_id(
+    herdr: HerdrApp, tmp_path: Path
+) -> None:
+    """shared.json keys a remote space by its prefixed id."""
+    _add_remote(herdr, tmp_path)
+    colors = herdr.config_dir / "shared.json"
+    colors.write_text(json.dumps({"space.colors": {"rm/sp9": "ansi5"}}))
+    assert herdr.snapshot()["spaces"][2]["color"] == "#8b7cf6"
+
+
+def test_hca_01_remote_session_file_is_read_once_per_pid(
+    herdr: HerdrApp, tmp_path: Path
+) -> None:
+    """The session file is read again only when the terminal's pid changes."""
+    bin_dir = _add_remote(herdr, tmp_path)
+    herdr.snapshot()
+    session_file = bin_dir / "remote_remote_home_.claude_sessions_77.json"
+    session_file.write_text(json.dumps({"sessionId": "changed"}))
+    assert herdr.snapshot()["spaces"][2]["tabs"][0]["panes"][0]["session"] == "sess-r"
+    (bin_dir / "hc_get_rm_t1.json").write_text(json.dumps({"foreground": {"pid": 78}}))
+    assert herdr.snapshot()["spaces"][2]["tabs"][0]["panes"][0]["session"] is None
+
+
+def test_hca_01_disconnected_machine_makes_no_remote_reads(
+    herdr: HerdrApp, tmp_path: Path
+) -> None:
+    """A machine Herdr does not call connected is offline and costs no remote call."""
+    bin_dir = _add_remote(herdr, tmp_path, state="disconnected")
+    snap = herdr.snapshot()
+    tab = snap["spaces"][2]["tabs"][0]
+    assert tab["panes"][0]["session"] is None
+    assert "tree" not in tab
+    assert snap["machines"][0]["state"] == "offline"
+    calls = (bin_dir / "hc.log").read_text().splitlines()
+    assert not [c for c in calls if c.startswith(("exec", "file", "get rm/"))]
