@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Run status</title>
+<link rel="stylesheet" href="/static/kit/kit.css">
+</head>
+<body>
+<main class="page">
+  <h1>Run status: what is running (replace)</h1>
+  <p class="lead">Rewrite this file to update the numbers; the bar moves in place.
+    The owner can press Stop. (replace)</p>
+
+  <canvas-progress data-canvas-id="job">
+    <script type="application/json">
+    {"value": 3, "max": 10, "label": "Solving step 3 of 10", "status": "running",
+     "detail": "Started 14:02, about 20 minutes left"}
+    </script>
+  </canvas-progress>
+
+  <section class="tiles">
+    <div class="tile">
+      <b class="value">3</b><span class="unit">/ 10</span>
+      <span class="label">Steps done</span>
+    </div>
+    <div class="tile good">
+      <b class="value">1.2</b><span class="unit">min</span>
+      <span class="label">Time per step</span>
+    </div>
+    <div class="tile warn">
+      <b class="value">71</b><span class="unit">%</span>
+      <span class="label">Memory in use</span>
+    </div>
+  </section>
+
+  <div class="callout info">
+    Latest message from the run, for example the current residual. (replace)
+  </div>
+
+  <h2>Controls</h2>
+  <canvas-buttons data-canvas-id="controls">
+    <script type="application/json">
+    {"buttons": [
+       {"id": "pause", "label": "Pause"},
+       {"id": "stop", "label": "Stop", "style": "danger"}]}
+    </script>
+  </canvas-buttons>
+  <p class="small muted">A press reaches the agent as a <code>button</code> event
+    (<code>stop</code> or <code>pause</code>).</p>
+
+  <details>
+    <summary>Recent log</summary>
+    <pre class="small">step 1 ok
+step 2 ok
+step 3 running</pre>
+  </details>
+</main>
+</body>
+</html>

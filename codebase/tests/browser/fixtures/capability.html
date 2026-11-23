@@ -1,0 +1,62 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  #target { font-family: "Probe", serif; font-size: 24px; padding: 8px; }
+  #target img { width: 32px; height: 32px; }
+</style>
+<script src="/static/vendor/occt-import-js/occt-import-js.js"></script>
+</head>
+<body>
+<div id="target">Hello capability <img id="pic" src="pixel.png" alt="pixel"></div>
+<script type="module">
+const results = {};
+async function step(name, fn) {
+  try { results[name] = await fn(); }
+  catch (error) { results[name] = "FAIL: " + error; }
+}
+await step("fetch", async () => {
+  const response = await fetch("data.json");
+  return (await response.json()).answer === 42 ? "ok" : "wrong data";
+});
+await step("import", async () => {
+  const module = await import("/static/vendor/marked/marked.esm.js");
+  return module.marked.parse("# t").includes("<h1") ? "ok" : "wrong output";
+});
+await step("wasm", async () => {
+  const occt = await occtimportjs({
+    locateFile: (name) => "/static/vendor/occt-import-js/" + name,
+  });
+  return typeof occt.ReadStepFile === "function" ? "ok" : "no ReadStepFile";
+});
+await step("snapdom", async () => {
+  // Headless Chromium here has no system fonts, and then the first CSS web
+  // font of a document fails to load. A throwaway FontFace.load() absorbs
+  // that, and only then is the real @font-face rule added (environment quirk).
+  const font = "/static/vendor/katex/fonts/KaTeX_Main-Regular.woff2";
+  await new FontFace("warmup", `url(${font})`).load();
+  const style = document.createElement("style");
+  style.textContent = `@font-face { font-family: "Probe"; src: url("${font}"); }`;
+  document.head.appendChild(style);
+  await document.fonts.load('24px "Probe"');
+  const {snapdom} = await import("/static/vendor/snapdom/snapdom.mjs");
+  const capture = await snapdom(document.getElementById("target"));
+  const svg = await capture.toSvg();
+  const markup = decodeURIComponent(svg.src.split(",").slice(1).join(","));
+  const hasImage = markup.includes("data:image/png");
+  const hasFont = /data:[^;,]*woff2/.test(markup);
+  return hasImage && hasFont ? "ok" : `image=${hasImage} font=${hasFont}`;
+});
+await step("api_blocked", async () => {
+  try {
+    await fetch("/api/sessions");
+    return "FAIL: api reachable";
+  } catch (error) {
+    return "ok";
+  }
+});
+agentCanvas.report("capability", results);
+</script>
+</body>
+</html>

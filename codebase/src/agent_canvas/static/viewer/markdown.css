@@ -1,0 +1,15 @@
+/* Markdown viewer: the kit's page typography for rendered Markdown. */
+.markdown { max-width: 52rem; overflow-wrap: anywhere; }
+.markdown h1, .markdown h2, .markdown h3, .markdown h4 { margin: var(--s4) 0 var(--s2); line-height: 1.25; }
+.markdown h1 { font-size: 1.9rem; }
+.markdown h2 { font-size: 1.25rem; }
+.markdown h3 { font-size: 1.05rem; }
+.markdown > :first-child { margin-top: 0; }
+.markdown p, .markdown ul, .markdown ol, .markdown pre, .markdown table, .markdown blockquote { margin: 0 0 var(--s3); }
+.markdown pre { background: var(--ac-subtle); padding: var(--s2) 10px; border-radius: 6px; overflow: auto; }
+.markdown :not(pre) > code { background: var(--ac-subtle); padding: 1px 4px; border-radius: 4px; }
+.markdown blockquote { padding-left: var(--s3); border-left: 4px solid var(--ac-border); color: var(--ac-muted); }
+.markdown table { border-collapse: collapse; font-size: 0.9rem; }
+.markdown th, .markdown td { padding: var(--s1) var(--s2); border-bottom: 1px solid var(--ac-border); text-align: left; }
+.markdown th { color: var(--ac-muted); font-weight: 600; }
+.markdown img { max-width: 100%; }

@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Compare options</title>
+<link rel="stylesheet" href="/static/kit/kit.css">
+</head>
+<body>
+<main class="page">
+  <h1>Which option should we take? (replace)</h1>
+  <p class="lead">One sentence on what is being decided and what you recommend.
+    (replace)</p>
+
+  <section class="columns">
+    <article class="card" id="option-a">
+      <h3>Option A: name (replace)</h3>
+      <p class="muted">What it is in one line.</p>
+      <ul>
+        <li>Advantage one</li>
+        <li>Advantage two</li>
+      </ul>
+      <p class="small muted">Drawback: one honest sentence.</p>
+    </article>
+    <article class="card" id="option-b">
+      <h3>Option B: name (replace)</h3>
+      <p class="muted">What it is in one line.</p>
+      <ul>
+        <li>Advantage one</li>
+        <li>Advantage two</li>
+      </ul>
+      <p class="small muted">Drawback: one honest sentence.</p>
+    </article>
+    <article class="card" id="option-c">
+      <h3>Option C: name (replace)</h3>
+      <p class="muted">What it is in one line.</p>
+      <ul>
+        <li>Advantage one</li>
+        <li>Advantage two</li>
+      </ul>
+      <p class="small muted">Drawback: one honest sentence.</p>
+    </article>
+  </section>
+
+  <div class="callout">
+    <strong>Recommendation:</strong> option B, because of one decisive reason.
+    (replace)
+  </div>
+
+  <h2>Side by side</h2>
+  <div class="scroll">
+    <table class="data">
+      <thead>
+        <tr><th>Criterion</th><th class="num">A</th><th class="num">B</th>
+            <th class="num">C</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Mass (g)</td><td class="num">120</td><td class="num">96</td>
+            <td class="num">88</td></tr>
+        <tr><td>Cost (EUR)</td><td class="num">14.0</td><td class="num">18.5</td>
+            <td class="num">22.0</td></tr>
+        <tr><td>Print time (h)</td><td class="num">3.5</td><td class="num">4.2</td>
+            <td class="num">6.0</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <details>
+    <summary>How the options were scored</summary>
+    <p>Method, assumptions and sources go here, folded away. (replace)</p>
+  </details>
+
+  <h2>Your choice</h2>
+  <canvas-ask data-canvas-id="decision">
+    <script type="application/json">
+    {"question": "Which option should we take? (replace)",
+     "context": "The decisive reason, in one sentence. (replace)",
+     "options": [
+       {"id": "a", "label": "Option A", "description": "Name (replace)"},
+       {"id": "b", "label": "Option B", "description": "Name (replace)"},
+       {"id": "c", "label": "Option C", "description": "Name (replace)"}
+     ],
+     "recommended": "b"}
+    </script>
+  </canvas-ask>
+</main>
+</body>
+</html>

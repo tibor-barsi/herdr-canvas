@@ -1,0 +1,34 @@
+herdr-canvas: third-party notices
+
+herdr-canvas itself is under the licence in LICENSE. It includes the
+material below, which keeps its own licence and owner.
+
+Herdr (Apache License 2.0, https://github.com/herdrdev/herdr)
+  - codebase/src/agent_canvas/static/herdr-assets/fonts/geist.woff2 (the Geist font
+    as shipped with the Herdr desktop app; see the font entry below)
+  - the layout and colours of the sidebar, tab bar and split cards in
+    codebase/src/agent_canvas/static/herdr-view.css and herdr-view.js follow
+    the Herdr desktop app's look (the code is written for this project).
+  The Apache-2.0 text is in licenses/herdr-APACHE-2.0.txt. The name "Herdr" is a
+  mark of the Herdr project; the Apache-2.0 licence does not grant any right to
+  use it. herdr-canvas is an independent project and is not
+  endorsed by Herdr.
+
+Geist font (SIL Open Font License 1.1, https://openfontlicense.org)
+  - codebase/src/agent_canvas/static/herdr-assets/fonts/geist.woff2
+  Geist is by Vercel and Basement Studio (https://github.com/vercel/geist-font).
+  The licence text with the copyright line is in licenses/geist-OFL-1.1.txt.
+
+Icons
+  - Stroke icons in herdr-view.css are in the style of Lucide
+    (ISC licence, https://lucide.dev; text in licenses/lucide-ISC.txt).
+  - The Claude Code mark in herdr-view.css is from the LobeHub icon set
+    (MIT licence, https://github.com/lobehub/lobe-icons; text in
+    licenses/lobe-icons-MIT.txt). The Claude name and
+    mark belong to Anthropic; they are used here only to label Claude Code
+    agents.
+
+Vendored browser libraries
+  Their licences are in codebase/src/agent_canvas/static/vendor/licenses/, and
+  codebase/src/agent_canvas/static/vendor/MANIFEST.json lists the version and
+  SHA-256 of every vendored file.

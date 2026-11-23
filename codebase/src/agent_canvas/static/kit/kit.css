@@ -1,0 +1,163 @@
+/* agent-canvas design kit (opt-in): <link rel="stylesheet" href="/static/kit/kit.css">
+   Same system fonts and palette as the blocks; follows prefers-color-scheme. */
+:root {
+  color-scheme: light dark;
+  --ac-fg: #1f2328; --ac-muted: #59636e; --ac-bg: #ffffff; --ac-surface: #ffffff;
+  --ac-subtle: #f3f5f8; --ac-border: #d1d9e0; --ac-accent: #2457c5;
+  --ac-danger: #c62828; --ac-ok: #1a7f37; --ac-warn: #9a6700; --ac-alt: #6f42c1;
+  --ac-tint-info: #e8effc; --ac-tint-warn: #fff4d6; --ac-tint-bad: #fdeaea;
+  --s1: 4px; --s2: 8px; --s3: 16px; --s4: 24px; --s5: 40px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ac-fg: #e6edf3; --ac-muted: #9aa6b2; --ac-bg: #14181d; --ac-surface: #1c2128;
+    --ac-subtle: #262c35; --ac-border: #3d444d; --ac-accent: #6e9bff;
+    --ac-danger: #ff7b72; --ac-ok: #56d364; --ac-warn: #e3b341; --ac-alt: #b69cf5;
+    --ac-tint-info: #1d2a44; --ac-tint-warn: #3b2f12; --ac-tint-bad: #44201f;
+  }
+}
+*, *::before, *::after { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--ac-bg); color: var(--ac-fg);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, sans-serif;
+}
+img, svg, canvas, video { max-width: 100%; }
+
+/* Page container and text */
+.page { max-width: 72rem; margin: 0 auto; padding: var(--s4) var(--s3) var(--s5); }
+.page > * + *, .stack > * + * { margin-top: var(--s3); }
+.page h1 { margin: 0; font-size: 1.9rem; line-height: 1.2; }
+.page h2 { margin: var(--s4) 0 0; font-size: 1.25rem; }
+.page h3 { margin: 0; font-size: 1.05rem; }
+.lead { font-size: 1.125rem; color: var(--ac-muted); max-width: 46rem; }
+.muted { color: var(--ac-muted); }
+.small { font-size: 0.85rem; }
+code, kbd { font: 0.9em ui-monospace, Menlo, Consolas, monospace; }
+a { color: var(--ac-accent); }
+
+/* Columns: .columns auto-fits; .cols-2 and .cols-3 are fixed; one column < 700px */
+.columns, .cols-2, .cols-3 { display: grid; gap: var(--s3); align-items: start; }
+.columns { grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); }
+.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.columns > *, .cols-2 > *, .cols-3 > * { min-width: 0; margin-top: 0; }
+@media (max-width: 700px) {
+  .cols-2, .cols-3 { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Card */
+.card {
+  background: var(--ac-surface); border: 1px solid var(--ac-border);
+  border-radius: 10px; padding: var(--s3);
+}
+.card > * + * { margin-top: var(--s2); }
+.card > :first-child { margin-top: 0; }
+
+/* Number tiles: <div class="tile good"><b class="value">12.4</b>
+   <span class="unit">mm</span><span class="label">Deflection</span></div> */
+.tiles { display: grid; gap: var(--s3);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr)); }
+.tile {
+  background: var(--ac-surface); border: 1px solid var(--ac-border);
+  border-left: 4px solid var(--ac-border); border-radius: 10px;
+  padding: var(--s2) var(--s3); min-width: 0;
+}
+.tile .value { font-size: 1.8rem; font-weight: 650; line-height: 1.2;
+  font-variant-numeric: tabular-nums; }
+.tile .unit { margin-left: var(--s1); color: var(--ac-muted); }
+.tile .label { display: block; color: var(--ac-muted); font-size: 0.85rem; }
+.tile.good { border-left-color: var(--ac-ok); }
+.tile.warn { border-left-color: var(--ac-warn); }
+.tile.bad { border-left-color: var(--ac-danger); }
+.tile.good .value { color: var(--ac-ok); }
+.tile.warn .value { color: var(--ac-warn); }
+.tile.bad .value { color: var(--ac-danger); }
+
+/* Callout: .info, .warn or .bad */
+.callout {
+  background: var(--ac-tint-info); border: 1px solid var(--ac-border);
+  border-left: 4px solid var(--ac-accent); border-radius: 8px;
+  padding: var(--s2) var(--s3);
+}
+.callout.warn { background: var(--ac-tint-warn); border-left-color: var(--ac-warn); }
+.callout.bad { background: var(--ac-tint-bad); border-left-color: var(--ac-danger); }
+.callout > :first-child { margin-top: 0; }
+.callout > :last-child { margin-bottom: 0; }
+
+/* Figure with caption */
+.page figure { margin: 0; }
+.page figure > img, .page figure > canvas-image, .page figure > canvas-plot {
+  display: block; border-radius: 8px; }
+.page figcaption { margin-top: var(--s2); color: var(--ac-muted); font-size: 0.85rem; }
+
+/* Folded sections */
+.page details {
+  border: 1px solid var(--ac-border); border-radius: 8px; background: var(--ac-surface);
+}
+.page summary { cursor: pointer; padding: var(--s2) var(--s3); font-weight: 600; }
+.page details[open] summary { border-bottom: 1px solid var(--ac-border); }
+.page details > :not(summary) { margin: var(--s3); }
+
+/* Compact hand-written tables; numbers get class "num" */
+.scroll { overflow-x: auto; }
+table.data { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+table.data th, table.data td {
+  padding: var(--s1) var(--s2); border-bottom: 1px solid var(--ac-border);
+  text-align: left; vertical-align: top;
+}
+table.data thead th { color: var(--ac-muted); font-weight: 600;
+  border-bottom-width: 2px; white-space: nowrap; }
+table.data tbody tr:hover { background: var(--ac-subtle); }
+table.data .num { text-align: right; font-variant-numeric: tabular-nums;
+  white-space: nowrap; }
+
+/* Design cards: <section class="cards"> of <article class="card"> with a header
+   (title, .badge), .tiles and .panels (up to three blocks, side by side from
+   900px). Add "compare" to the section: cards become columns on shared rows. */
+.cards { display: grid; gap: var(--s3); grid-template-columns: minmax(0, 1fr); }
+.cards > .card { display: flex; flex-direction: column; gap: var(--s3);
+  padding: var(--s3) var(--s3) var(--s4); min-width: 0; }
+.cards > .card > * { margin: 0; min-width: 0; }
+.cards > .card:has(.badge.recommended) { border-color: var(--ac-ok);
+  box-shadow: 0 0 0 1px var(--ac-ok); }
+.cards .card > header { display: flex; align-items: center;
+  justify-content: space-between; gap: var(--s2); }
+.cards .card > header h2 { margin: 0; font-size: 1.15rem; line-height: 1.3; }
+.cards .tiles { grid-template-columns: repeat(auto-fit, minmax(min(100%, 5.75rem), 1fr));
+  align-content: start; gap: var(--s2); }
+.cards .tile { padding: var(--s1) var(--s2); }
+.cards .tile .value { font-size: 1.35rem; }
+.cards .tile .unit { font-size: 0.8rem; margin-left: 2px; }
+.panels { display: grid; gap: var(--s3); grid-template-columns: minmax(0, 1fr);
+  align-content: start; }
+.panels > * { margin: 0; min-width: 0; }
+/* Blocks in a panel sit flat on the card: no box of their own. */
+.panels > * { --ac-block-border: none; --ac-block-padding: 0; --ac-block-bg: transparent; }
+.panels > figure { display: flex; flex-direction: column; }
+.panels figcaption { order: -1; margin: 0 0 var(--s1); font-size: 0.75rem;
+  font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+.panels :is(canvas-image, canvas-model, canvas-plot, canvas-scene) {
+  display: block; margin: 0; }
+@media (min-width: 900px) {
+  .cards:not(.compare) .panels { grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
+}
+.cards.compare { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(21rem, 1fr);
+  grid-template-rows: repeat(5, auto); overflow-x: auto; padding: 2px 2px var(--s2); }
+.cards.compare > .card { display: grid; grid-row: span 5; grid-template-rows: subgrid;
+  align-content: start; padding-bottom: var(--s3); }
+.cards.compare .panels { display: contents; }
+
+/* Badges: .recommended, .fallback, .fails, .placeholder, .ok, .warn, .bad, .info */
+.badge { --b: var(--ac-muted); display: inline-block; flex: none; white-space: nowrap;
+  padding: 1px 10px; border-radius: 999px; font-size: 0.75rem; font-weight: 600;
+  line-height: 1.6; color: color-mix(in srgb, var(--b) 70%, var(--ac-fg)); border: 1px solid color-mix(in srgb, var(--b) 50%, transparent);
+  background: color-mix(in srgb, var(--b) 12%, transparent); }
+.badge.ok { --b: var(--ac-ok); }
+.badge.warn { --b: var(--ac-warn); }
+.badge.bad { --b: var(--ac-danger); }
+.badge.info { --b: var(--ac-accent); }
+.badge.fallback { --b: var(--ac-alt); }
+.badge.recommended { --b: var(--ac-ok); background: var(--b); color: var(--ac-bg); border-color: var(--b); }
+.badge.fails { --b: var(--ac-danger); background: var(--b); color: var(--ac-bg); border-color: var(--b); }
+.badge.placeholder { background: transparent; border-style: dashed; font-weight: 500; }

@@ -1,0 +1,12 @@
+{
+  "name": "agent-canvas-local",
+  "description": "Local marketplace for the agent-canvas plugin.",
+  "owner": {"name": "agent-canvas"},
+  "plugins": [
+    {
+      "name": "agent-canvas",
+      "source": "./",
+      "description": "Local canvas where Claude Code shows pages and receives feedback."
+    }
+  ]
+}

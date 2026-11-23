@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "agent-canvas": {
+      "command": "sh",
+      "args": [
+        "-c",
+        "command -v agent-canvas >/dev/null 2>&1 || { echo 'agent-canvas: command not found. Install it with: uv tool install <path to agent-canvas>/codebase (see the plugin README), then restart Claude Code.' >&2; exit 127; }; exec agent-canvas mcp"
+      ]
+    }
+  }
+}

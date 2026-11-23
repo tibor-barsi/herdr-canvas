@@ -1,0 +1,70 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Checks page</title>
+<link rel="stylesheet" href="/static/kit/kit.css">
+</head>
+<body><div class="page">
+<h1>Checks</h1>
+<canvas-do data-canvas-id="kinds-setup"><script type="application/json">{"title": "Show the two fixture dashboards", "where": "a terminal", "time": "1 min", "steps": [{"text": "Create a scratch session and show both pages. Run all five lines in one terminal and keep it: $SID is used later.", "run": "F=~/projects/agent-canvas/codebase/tests/fixtures/kinds\nmkdir -p /tmp/kinds-check\nSID=$(agent-canvas session start --title \"Kinds check\" --project /tmp/kinds-check | jq -r .session)\nagent-canvas show dashboard.html  --copy \"$F/dashboard.html\"  --session \"$SID\"\nagent-canvas show dashboard2.html --copy \"$F/dashboard2.html\" --session \"$SID\"", "expect": "Two tabs of the session \"Kinds check\"."}]}</script></canvas-do>
+<canvas-do data-canvas-id="kinds-ask-receipt-cmd"><script type="application/json">{"title": "Show the receipt of your answer", "where": "a terminal", "time": "1 min", "steps": [{"text": "List the answers.", "run": "agent-canvas answers --session \"$SID\" --page dashboard.html", "expect": "The output lists the answer."}]}</script></canvas-do>
+<p>Filler paragraph 0: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 1: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 2: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 3: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 4: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 5: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 6: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 7: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 8: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 9: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 10: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 11: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 12: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 13: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 14: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 15: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 16: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 17: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 18: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 19: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 20: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 21: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 22: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 23: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 24: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 25: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 26: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 27: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 28: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 29: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 30: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 31: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 32: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 33: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 34: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 35: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 36: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 37: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 38: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 39: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 40: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 41: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 42: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 43: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 44: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 45: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 46: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 47: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 48: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 49: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 50: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 51: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 52: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 53: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 54: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 55: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 56: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 57: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 58: text that makes the page long enough to scroll.</p>
+<p>Filler paragraph 59: text that makes the page long enough to scroll.</p>
+<canvas-do data-canvas-id="todo-last-check"><script type="application/json">{"title": "Show the session list", "where": "a terminal", "time": "1 min", "steps": [{"text": "List the sessions.", "run": "agent-canvas session list"}, {"text": "Show one status line.", "run": "agent-canvas status\nagent-canvas pending"}]}</script></canvas-do>
+</div></body></html>

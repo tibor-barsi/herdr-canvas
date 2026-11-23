@@ -1,0 +1,11 @@
+.agent-canvas/
+__pycache__/
+*.pyc
+.venv/
+node_modules/
+.pytest_cache/
+.ruff_cache/
+dist/
+*.egg-info/
+test-results/
+.playwright/

@@ -1,0 +1,68 @@
+[project]
+name = "agent-canvas"
+version = "0.4.0"
+description = "Local canvas where coding agents show pages and receive feedback."
+requires-python = ">=3.12"
+dependencies = [
+    "mcp>=2.3.0",
+    "playwright>=1.50",
+    "starlette>=1.9.0",
+    "uvicorn>=0.54.0",
+    "watchfiles>=1.3.0",
+    "websockets>=17.3",
+]
+
+[project.scripts]
+agent-canvas = "agent_canvas.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agent_canvas"]
+# Everything under the package directory ships, including static/vendor.
+
+[dependency-groups]
+dev = [
+    "brotli>=1.2.0",
+    "fonttools>=4.67.0",
+    "httpx>=0.28.1",
+    "pytest>=8",
+    "pytest-timeout>=2.4.0",
+    "pytest-xdist>=3.8.0",
+    "ruff>=0.8",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# The tests import each other as `tests.…`; on the laptop a stray ":" in PYTHONPATH hid this.
+pythonpath = ["."]
+# worksteal: an idle worker takes tests from a busy worker's queue, so a few long tests do
+# not leave one worker running alone at the end (xdist default "load" does).
+addopts = "-n auto --dist worksteal"
+markers = [
+    "unit: fast tests without I/O beyond temp files",
+    "integration: tests that build, install or run processes",
+    "browser: tests driving headless Chromium through Playwright",
+    "e2e: end-to-end runs with real agents (never in the commit gate)",
+    "retry_once: e2e test run once more after a failure; Claude Code tests switch to sonnet (TST-03)",
+    "fixed_model(name): e2e test that always runs with this model (opencode)",
+    "thumbs: the test hub queues page thumbnails (off by default, THUMB-02)",
+    "timing: asserts a wall-clock budget that depends on machine speed and load (left out of the work slot runs, D-53)",
+    "hub_config(**fields): override Config fields of the test hub fixture",
+]
+
+[tool.ruff]
+line-length = 88
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["D", "E", "F", "I"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D"]
+"scripts/**" = ["D103"]

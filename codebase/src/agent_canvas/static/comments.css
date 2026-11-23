@@ -1,0 +1,128 @@
+/* Comment box and panel of the shell (COM-01 to COM-06); layout variant A of
+   prototype/comments/. Uses the shell's colour variables; light and dark follow it. */
+:root {
+  --mark: #c2410c; --mark-text: #c2410c; --good: #1b7f4b; --on-accent: #fff;
+  --ans-bg: #d3f0de; --faint: #6b7480; --warn: #9a5b00;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --mark-text: #ff8f57; --good: #4cc38a; --on-accent: #0d1830; --ans-bg: #173a29; --warn: #f0b35a; }
+}
+
+.ico { width: 15px; height: 15px; flex: none; }
+
+/* the page area: frame and panel side by side; an outline while commenting */
+#mid { flex: 1; display: flex; min-height: 0; }
+#mid > main { flex: 1; }
+body.commenting main::after { content: ""; position: absolute; inset: 0; z-index: 1;
+                              border: 3px solid var(--accent); pointer-events: none; }
+#comment-panel { flex: none; width: 320px; display: flex; flex-direction: column; min-height: 0;
+                 background: var(--bar); border-left: 1px solid var(--line); }
+#comment-panel[hidden] { display: none; }
+#comment-panel.strip { width: 30px; }
+/* window narrower than 1000 px (narrowWindow in shell.js): the open panel lies over the page */
+#mid { position: relative; }
+#comment-panel.float:not(.strip) { position: absolute; top: 0; right: 0; bottom: 0; z-index: 3;
+                                   box-shadow: -4px 0 12px rgba(0, 0, 0, .25); }
+.stripbutton { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 8px;
+               padding: 8px 0; border: 0; border-radius: 0; background: none; }
+.stripbutton .word { writing-mode: vertical-rl; color: var(--muted); font-size: 12px; }
+.stripbutton:hover { background: var(--tab); }
+.ph { flex: none; display: flex; flex-direction: column; gap: 6px; padding: 8px 10px;
+      border-bottom: 1px solid var(--line); }
+.ph .t { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.ph .t b { font-size: 14px; }
+.ph .t .dim { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ph .t .wait { flex: none; color: var(--warn); font-weight: bold; }
+.dim { color: var(--muted); }
+.ph .t .collapse { margin-left: auto; flex: none; padding: 0 6px; background: none; border: 0; }
+.ph .t .collapse::before { content: "»"; }
+.ptools { display: flex; align-items: center; gap: 4px; justify-content: space-between; }
+.ptools .foldall { font-size: 12px; padding: 0 8px; background: none; border: 0; color: var(--muted); }
+.filters { display: flex; gap: 4px; }
+.filters button { font-size: 12px; padding: 0 8px; background: var(--tab);
+                  border: 1px solid var(--line); border-radius: 5px; }
+.filters button[aria-pressed="true"] { background: var(--tab-active); border-color: var(--accent); }
+.plist { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column;
+         gap: 6px; scrollbar-width: thin; }
+.lgrp { margin: 6px 2px 0; font-size: 12px; text-transform: uppercase;
+        letter-spacing: .04em; color: var(--muted); }
+.empty { color: var(--muted); font-size: 12.5px; padding: 10px 4px; }
+
+/* entries */
+.ent .fold { flex: none; padding: 0 3px; color: var(--muted); cursor: pointer; }
+.ent .fold::before { content: "▾"; }
+.ent.folded .fold::before { content: "▸"; }
+.ent.folded { padding: 4px 9px; }
+.ent .tx1 { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ent .rc { flex: none; color: var(--good); font-size: 12px; }
+.cn { flex: none; width: 20px; height: 20px; border-radius: 50%; background: var(--mark);
+      color: #fff; font: 700 12px/20px system-ui, sans-serif; text-align: center; }
+.cn.draft { background: transparent; color: var(--mark-text);
+            box-shadow: inset 0 0 0 2px var(--mark-text); }
+.cn.st-done, .cn.done { background: var(--faint); }
+.cn.lost { background: transparent; color: var(--warn); box-shadow: inset 0 0 0 2px var(--warn); }
+.chip { flex: none; font: 600 12px/16px system-ui, sans-serif; padding: 0 7px;
+        border-radius: 8px; border: 1px solid var(--line); color: var(--muted);
+        white-space: nowrap; }
+.chip.lost { background: var(--warn-bg); color: var(--warn); border-color: var(--warn); }
+.chip.unread::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 5px;
+                       border-radius: 50%; background: var(--accent); }
+.chip.draft { border: 1px dashed var(--accent); color: var(--accent); }
+.chip.sent { color: var(--accent); border-color: var(--accent); }
+.chip.seen { color: var(--text); }
+.chip.answered { background: var(--ans-bg); color: var(--good); border-color: var(--good); }
+.chip.done { color: var(--good); border-color: transparent; }
+.ent { border: 1px solid var(--line); border-radius: 7px; background: var(--panel);
+       padding: 7px 9px; cursor: pointer; }
+.ent:hover, .ent.hot { border-color: var(--accent); }
+.ent.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.ent .eh { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.ent .kd { display: flex; align-items: center; color: var(--muted); flex: none; }
+.ent .tg { flex: 1; min-width: 0; color: var(--muted); font-size: 12px; overflow: hidden;
+           text-overflow: ellipsis; white-space: nowrap; }
+.ent .q { margin: 4px 0 0; font-size: 12px; color: var(--muted); font-style: italic;
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ent .tx { margin-top: 3px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ent.st-done .tx { color: var(--muted); }
+.ent .rp { margin: 6px 0 0 10px; padding: 4px 0 0 9px; border-left: 2px solid var(--good); }
+.ent .rp.me { border-left-color: var(--line); }
+.ent .rp .who { font-size: 12px; color: var(--muted); }
+.ent .rp .who b { color: var(--good); }
+.ent .rp.me .who b { color: var(--text); }
+.ent .rp .rt { white-space: pre-wrap; overflow-wrap: anywhere; }
+.ent .rform { margin: 6px 0 0 10px; }
+.ent .rform textarea { display: block; font: inherit; color: inherit; box-sizing: border-box; width: 100%;
+                       min-height: 44px; resize: vertical; padding: 4px 6px; background: var(--bg);
+                       border: 1px solid var(--line); border-radius: 5px; outline: none; }
+.ent .rform textarea:focus { border-color: var(--accent); }
+.ent .rform .note { margin-top: 3px; font-size: 12px; color: var(--err); }
+.ent .rform .note:empty { display: none; }
+.ent .acts { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.ent .acts button.done { border-color: var(--good); color: var(--good); }
+.ent .acts button:disabled { opacity: .5; cursor: default; }
+.ent .acts button { font-size: 12px; padding: 1px 8px; background: var(--tab);
+                    border: 1px solid var(--line); border-radius: 5px; }
+.ent .acts button:hover { border-color: var(--accent); }
+
+/* the box beside the selection */
+.cbox { position: absolute; z-index: 5; width: 300px; box-sizing: border-box;
+        background: var(--panel); color: var(--text); border: 1px solid var(--accent);
+        border-radius: 8px; box-shadow: 0 6px 22px rgba(0, 0, 0, .35); padding: 8px 10px; }
+.cbox .h { display: flex; gap: 6px; align-items: center; font-size: 12px;
+           color: var(--muted); min-width: 0; }
+.cbox .h b { color: var(--text); }
+.cbox .h .what { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cbox textarea { display: block; font: inherit; color: inherit; box-sizing: border-box; width: 100%; margin-top: 6px;
+                 min-height: 58px; resize: vertical; padding: 5px 7px; background: var(--bg);
+                 border: 1px solid var(--line); border-radius: 5px; outline: none; }
+.cbox textarea:focus { border-color: var(--accent); }
+.cbox .note { margin-top: 4px; font-size: 12px; color: var(--err); }
+.cbox .note:empty { display: none; }
+.cbox .f { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 12px;
+           color: var(--muted); }
+.cbox .sp { flex: 1; }
+.cbox button.primary { padding: 2px 12px; background: var(--accent); color: var(--on-accent);
+                       border: 1px solid var(--accent); border-radius: 5px; font-weight: 600; }
+.cbox kbd { font: 12px ui-monospace, "DejaVu Sans Mono", monospace; padding: 0 4px;
+            border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 3px;
+            background: var(--bg); }

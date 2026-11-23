@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Geometry review</title>
+<link rel="stylesheet" href="/static/kit/kit.css">
+</head>
+<body>
+<main class="page">
+  <h1>Geometry review: part name (replace)</h1>
+  <p class="lead">What to look at in this model, for example the fillet near the
+    mounting holes. Turn on Mark to place numbered markers on the surface.
+    (replace)</p>
+
+  <figure>
+    <!-- part.stl is a sample cube. Replace it with your own parts: .stl, .step
+         or .glb files, one entry each (several parts get a list with checkboxes,
+         colours and opacity; "split": true on a .step file gives one part per solid) -->
+    <canvas-scene data-canvas-id="part">
+      <script type="application/json">
+      {"parts": [{"src": "part.stl", "name": "part"}], "units": "mm", "height": 420}
+      </script>
+    </canvas-scene>
+    <figcaption>Drag to orbit, wheel to zoom, right-drag to pan.</figcaption>
+  </figure>
+
+  <section class="cols-2">
+    <section class="tiles">
+      <div class="tile">
+        <b class="value">40</b><span class="unit">mm</span>
+        <span class="label">Overall size</span>
+      </div>
+      <div class="tile good">
+        <b class="value">96</b><span class="unit">g</span>
+        <span class="label">Mass</span>
+      </div>
+    </section>
+    <div class="stack">
+      <div class="callout warn">
+        <strong>Open issue:</strong> the thin wall may not print. (replace)
+      </div>
+      <div class="card">
+        <h3>What changed since the last version</h3>
+        <ul>
+          <li>Change one (replace)</li>
+          <li>Change two</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <h2>Your remarks</h2>
+  <canvas-textbox data-canvas-id="remarks">
+    <script type="application/json">
+    {"label": "Anything to change?", "multiline": true, "submit": "Send"}
+    </script>
+  </canvas-textbox>
+</main>
+</body>
+</html>

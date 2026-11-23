@@ -1,0 +1,44 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>herdr-view demo</title>
+<link rel="stylesheet" href="herdr-view.css">
+<style>html,body{margin:0;height:100%;background:#0a0b0d}#root{position:fixed;inset:0}
+.ph{position:absolute;inset:0;background:#202226}</style>
+</head><body><div id="root"></div>
+<script src="herdr-view.js"></script>
+<script>
+const pane = (terminal, name, status, session, focused) =>
+  ({ pane: 'pn' + terminal, terminal, name, status, app: 'claude-code', focused: !!focused, session });
+const HERDR = {
+  available: true,
+  focus: { space: 'sp2', tab: 'tb2', pane: 'pn3' },
+  spaces: [
+    { id: 'sp1', name: 'data', color: '#e3814f', active: false,
+      tabs: [{ id: 'tb1', name: 'main', active: true, panes: [pane('t1', 'claude', 'idle', null, true)] }] },
+    { id: 'sp2', name: '6D-sensors', color: '#22a99a', active: true, tabs: [
+      { id: 'tb2', name: 'test rig', active: true, panes: [
+        pane('t2', 'Claude Code', 'working', 's-rig'), pane('t3', 'Claude', 'idle', 's-fem', true)] },
+      { id: 'tb3', name: 'calibration', active: false,
+        tree: { dir: 'row', weight: 1, children: [{ pane: 'pnt4', weight: 1 },
+          { dir: 'column', weight: 1, children: [{ pane: 'pnt5', weight: 1 }, { pane: 'pnt6', weight: 1 }] }] },
+        panes: [
+        pane('t4', 'claude', 'blocked', 's-cal'), pane('t5', 'shell', 'idle', null), pane('t6', 'claude', 'done', 's-log')] }] },
+  ],
+  other: ['s-x1', 's-x2'],
+};
+const SESSIONS = [
+  { id: 's-rig', title: 'Test rig', state: 'active', pages: ['rig-concept.html', 'shaker.html'], active_page: 'rig-concept.html' },
+  { id: 's-fem', title: 'FEM', state: 'active', pages: ['fem-convergence.html'], active_page: 'fem-convergence.html' },
+  { id: 's-cal', title: 'Calibration', state: 'active', pages: ['plan.html'], active_page: 'plan.html' },
+  { id: 's-log', title: 'Logger', state: 'active', pages: ['log.html', 'notes.html'], active_page: 'log.html' },
+  { id: 's-x1', title: 'Readings 2026', state: 'active', pages: ['readings.html'], active_page: 'readings.html' },
+  { id: 's-x2', title: 'Misc', state: 'active', pages: ['a.html'], active_page: 'a.html' },
+].map((s) => ({ ...s, project: 'p', agent: 'claude-code' }));
+window.calls = [];
+const log = (name) => (...a) => window.calls.push([name, ...a]);
+window.view = HerdrView.mount(document.getElementById('root'), {
+  onSpace: log('space'), onTab: log('tab'), onPane: log('pane'), onPage: log('page'),
+  onOther: log('other'),
+  onFrame(slot) { if (!slot.firstChild) { const d = document.createElement('div'); d.className = 'ph'; slot.append(d); } },
+});
+window.view.update(HERDR, SESSIONS);
+</script></body></html>

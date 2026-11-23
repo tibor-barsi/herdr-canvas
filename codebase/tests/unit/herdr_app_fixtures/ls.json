@@ -1,0 +1,11 @@
+{"spaces": [
+ {"id": "sp1", "name": "data", "machine": null, "active": true, "tabs": [
+  {"id": "tb1", "name": "1", "active": true, "settled": false, "terminals": [
+   {"terminal": "t2", "pane": "p1", "status": "working", "app": "claude-code", "name": null, "sub_agents": []},
+   {"terminal": "t3", "pane": "p2", "status": "idle", "app": null, "name": "shell", "sub_agents": []}]},
+  {"id": "tb2", "name": "build", "active": false, "settled": false, "terminals": [
+   {"terminal": "t4", "pane": "p3", "status": "idle", "app": "claude-code", "name": null, "sub_agents": []}]}]},
+ {"id": "sp2", "name": "other", "machine": null, "active": false, "tabs": [
+  {"id": "tb3", "name": "1", "active": true, "settled": false, "terminals": [
+   {"terminal": "t5", "pane": "p4", "status": "idle", "app": null, "name": null, "sub_agents": []}]}]}],
+ "recent": []}

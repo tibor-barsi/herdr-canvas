@@ -1,0 +1,22 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>A second day: cards of the five kinds</title>
+<link rel="stylesheet" href="/static/kit/kit.css">
+</head><body><div class="page">
+<h1>A second day: cards of the five kinds</h1>
+
+<canvas-alert data-canvas-id="b-alert"><script type="application/json">{"title": "The chamber fan stopped", "text": "The log shows no rotation since 09:40."}</script>
+<canvas-do data-canvas-id="b-do"><script type="application/json">{"title": "Restart the fan controller", "where": "the print server, folder ~/prints", "time": "2 min", "steps": [{"text": "Stop the job and restart the controller", "run": "cd ~/prints\nsystemctl --user restart fan-controller", "expect": "no output"}, {"text": "Read the fan speed", "run": "fan-status --chamber", "expect": "speed above 1200 rpm"}]}</script></canvas-do>
+</canvas-alert>
+
+<canvas-ask data-canvas-id="b-number"><script type="application/json">{"form": "number", "question": "Which nozzle temperature for the next run?", "context": "The last run at 245 degrees stringed.", "unit": "°C", "min": 200, "max": 270, "default": 240}</script></canvas-ask>
+
+<canvas-ask data-canvas-id="b-several"><script type="application/json">{"form": "several", "question": "Which specimens go to the pull test?", "options": ["A1", "A2", "B1", "B2"]}</script></canvas-ask>
+
+<canvas-decision data-canvas-id="b-decision"><script type="application/json">{"text": "The bracket is printed in PETG, not PLA.", "why": "PLA creeps at the 60 degrees of the bed enclosure."}</script></canvas-decision>
+
+<canvas-live data-canvas-id="b-live"><script type="application/json">{"title": "Enclosure temperature", "text": "Read every minute from the logger.", "updated": "2026-01-01T09:00:00+00:00", "stale_after": 600}</script>
+<canvas-progress data-canvas-id="b-prog"><script type="application/json">{"value": 3, "max": 10, "label": "Print job 15: clamp_v2", "status": "running", "detail": "layer 150 of 500"}</script></canvas-progress>
+</canvas-live>
+
+<canvas-report data-canvas-id="b-report"><script type="application/json">{"type": "result", "title": "Pull test finished: the lightest bracket holds 160 N", "text": "Variant 2 is 18 g and held 160 N before it yielded."}</script></canvas-report>
+</div></body></html>

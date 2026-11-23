@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Design cards</title>
+<link rel="stylesheet" href="/static/kit/kit.css">
+</head>
+<body>
+<main class="page">
+  <h1>Which design should we take? (replace)</h1>
+  <p class="lead">One sentence with the recommendation and the number that decides
+    it. (replace)</p>
+
+  <!-- Key numbers of all designs side by side: edit the table. -->
+  <canvas-table data-canvas-id="numbers">
+    <script type="application/json">
+    {"columns": ["metric", "A", "B", "C"],
+     "rows": [["Mass (g)", 96, 120, 88],
+              ["Stiffness (kN/mm)", 1.8, 1.6, 0.9],
+              ["Cost (EUR)", 18.5, 14.2, 22.4]]}
+    </script>
+  </canvas-table>
+
+  <!-- Cards stack one under the other. For columns side by side with aligned
+       rows (titles, numbers, pictures, 3D, plots), write
+       <section class="cards compare"> instead. Keep the same parts in every
+       card: a header, .tiles, then up to three blocks in .panels. -->
+  <section class="cards">
+    <article class="card" id="design-a">
+      <header><h2>Design A</h2><span class="badge recommended">Recommended</span></header>
+      <div class="tiles">
+        <div class="tile good"><b class="value">96</b><span class="unit">g</span><span class="label">Mass</span></div>
+        <div class="tile good"><b class="value">1.8</b><span class="unit">kN/mm</span><span class="label">Stiffness</span></div>
+        <div class="tile"><b class="value">18.5</b><span class="unit">EUR</span><span class="label">Cost</span></div>
+      </div>
+      <div class="panels">
+        <figure>
+          <canvas-image data-canvas-id="image-a">
+            <script type="application/json">
+            {"src": "design-a.png", "alt": "Design A: stress contour"}
+            </script>
+          </canvas-image>
+          <figcaption>Stress</figcaption>
+        </figure>
+        <figure>
+          <canvas-model data-canvas-id="model-a">
+            <script type="application/json">
+            {"src": "part.stl", "units": "mm", "height": 260}
+            </script>
+          </canvas-model>
+          <figcaption>Geometry</figcaption>
+        </figure>
+        <figure>
+          <canvas-plot data-canvas-id="plot-a">
+            <script type="application/json">
+            {"data": [{"x": [1, 2, 3, 4], "y": [2.0, 4.1, 6.0, 8.2], "mode": "lines+markers",
+                       "name": "measured"},
+                      {"x": [1, 2, 3, 4], "y": [0.8, 1.6, 2.4, 3.3], "mode": "lines",
+                       "name": "limit"}],
+             "layout": {"height": 260, "xaxis": {"title": {"text": "load (kN)"}},
+                        "yaxis": {"title": {"text": "deflection (mm)"}}}}
+            </script>
+          </canvas-plot>
+          <figcaption>Response</figcaption>
+        </figure>
+      </div>
+    </article>
+    <article class="card" id="design-b">
+      <header><h2>Design B</h2><span class="badge fallback">Fallback</span></header>
+      <div class="tiles">
+        <div class="tile warn"><b class="value">120</b><span class="unit">g</span><span class="label">Mass</span></div>
+        <div class="tile good"><b class="value">1.6</b><span class="unit">kN/mm</span><span class="label">Stiffness</span></div>
+        <div class="tile good"><b class="value">14.2</b><span class="unit">EUR</span><span class="label">Cost</span></div>
+      </div>
+      <div class="panels">
+        <figure>
+          <canvas-image data-canvas-id="image-b">
+            <script type="application/json">
+            {"src": "design-b.png", "alt": "Design B: stress contour"}
+            </script>
+          </canvas-image>
+          <figcaption>Stress</figcaption>
+        </figure>
+        <figure>
+          <canvas-model data-canvas-id="model-b">
+            <script type="application/json">
+            {"src": "part.stl", "units": "mm", "height": 260}
+            </script>
+          </canvas-model>
+          <figcaption>Geometry</figcaption>
+        </figure>
+        <figure>
+          <canvas-plot data-canvas-id="plot-b">
+            <script type="application/json">
+            {"data": [{"x": [1, 2, 3, 4], "y": [1.8, 3.7, 5.6, 7.5], "mode": "lines+markers",
+                       "name": "measured"},
+                      {"x": [1, 2, 3, 4], "y": [1.0, 2.1, 3.1, 4.2], "mode": "lines",
+                       "name": "limit"}],
+             "layout": {"height": 260, "xaxis": {"title": {"text": "load (kN)"}},
+                        "yaxis": {"title": {"text": "deflection (mm)"}}}}
+            </script>
+          </canvas-plot>
+          <figcaption>Response</figcaption>
+        </figure>
+      </div>
+    </article>
+    <article class="card" id="design-c">
+      <header><h2>Design C</h2><span class="badge fails">Fails</span></header>
+      <div class="tiles">
+        <div class="tile good"><b class="value">88</b><span class="unit">g</span><span class="label">Mass</span></div>
+        <div class="tile bad"><b class="value">0.9</b><span class="unit">kN/mm</span><span class="label">Stiffness</span></div>
+        <div class="tile warn"><b class="value">22.4</b><span class="unit">EUR</span><span class="label">Cost</span></div>
+      </div>
+      <div class="panels">
+        <figure>
+          <canvas-image data-canvas-id="image-c">
+            <script type="application/json">
+            {"src": "design-c.png", "alt": "Design C: stress contour"}
+            </script>
+          </canvas-image>
+          <figcaption>Stress</figcaption>
+        </figure>
+        <figure>
+          <canvas-model data-canvas-id="model-c">
+            <script type="application/json">
+            {"src": "part.stl", "units": "mm", "height": 260}
+            </script>
+          </canvas-model>
+          <figcaption>Geometry</figcaption>
+        </figure>
+        <figure>
+          <canvas-plot data-canvas-id="plot-c">
+            <script type="application/json">
+            {"data": [{"x": [1, 2, 3, 4], "y": [1.2, 2.5, 3.6, 4.8], "mode": "lines+markers",
+                       "name": "measured"},
+                      {"x": [1, 2, 3, 4], "y": [1.4, 2.9, 4.3, 5.9], "mode": "lines",
+                       "name": "limit"}],
+             "layout": {"height": 260, "xaxis": {"title": {"text": "load (kN)"}},
+                        "yaxis": {"title": {"text": "deflection (mm)"}}}}
+            </script>
+          </canvas-plot>
+          <figcaption>Response</figcaption>
+        </figure>
+      </div>
+    </article>
+  </section>
+</main>
+</body>
+</html>

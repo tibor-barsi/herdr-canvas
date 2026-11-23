@@ -1,0 +1,7 @@
+{
+  "name": "agent-canvas",
+  "version": "0.4.0",
+  "description": "Show the owner HTML pages (plots, option comparisons, geometry, run status) in a local window and receive clicks, drawings and answers as feedback.",
+  "author": {"name": "agent-canvas"},
+  "keywords": ["canvas", "feedback", "visual", "mcp"]
+}

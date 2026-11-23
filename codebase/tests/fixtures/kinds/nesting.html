@@ -1,0 +1,17 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Cards inside cards</title></head><body>
+<canvas-report data-canvas-id="n-report"><script type="application/json">{"title": "Outer report"}</script>
+<canvas-decision data-canvas-id="n-decision"><script type="application/json">{"text": "A decision inside a report"}</script></canvas-decision>
+<div><canvas-ask data-canvas-id="n-ask-deep"><script type="application/json">{"question": "An Ask in a wrapper is fine"}</script></canvas-ask></div>
+</canvas-report>
+<canvas-decision data-canvas-id="n-outer-decision"><script type="application/json">{"text": "Outer decision"}</script>
+<canvas-ask data-canvas-id="n-ask-in-decision"><script type="application/json">{"question": "An Ask in a Decision"}</script></canvas-ask>
+</canvas-decision>
+<canvas-ask data-canvas-id="n-outer-ask"><script type="application/json">{"question": "Outer Ask"}</script>
+<canvas-do data-canvas-id="n-do-in-ask"><script type="application/json">{"title": "A Do in an Ask"}</script></canvas-do>
+</canvas-ask>
+<canvas-live data-canvas-id="n-live"><script type="application/json">{"title": "Outer live"}</script>
+<canvas-alert data-canvas-id="n-alert-in-live"><script type="application/json">{"title": "An Alert in a Live"}</script></canvas-alert>
+<canvas-do data-canvas-id="n-do-in-live"><script type="application/json">{"title": "A Do in a Live is fine"}</script></canvas-do>
+</canvas-live>
+</body></html>

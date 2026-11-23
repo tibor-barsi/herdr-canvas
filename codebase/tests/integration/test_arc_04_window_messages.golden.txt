@@ -1,0 +1,30 @@
+connect: hello
+connect: tabs
+connect: herdr
+session a: tabs
+session b: tabs
+write page: update
+show: show
+edit page: update
+edit asset: file-changed
+watch starts: listening
+shell event: event-created
+watch ends: listening
+ask: ask-opened
+ask: listening
+answer: tabs
+answer: tabs
+answer: listening
+rename: tabs
+hide: tabs
+unhide: tabs
+look: render
+comment: comments
+delete comment: comments
+comment again: comments
+lost: comments
+send: comments
+send: send-state
+answer item: answers
+tick: answers
+read: answers

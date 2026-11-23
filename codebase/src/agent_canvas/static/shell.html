@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>agent-canvas</title>
+<link rel="icon" type="image/svg+xml" href="/static/icon.svg">
+<meta name="agent-canvas-build" content="__AGENT_CANVAS_BUILD__">
+<link rel="stylesheet" href="/static/herdr-view.css">
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f4f5f7; --bar: #e8eaee; --text: #1d2229; --muted: #5d6673;
+    --line: #cfd3da; --tab: #dde0e6; --tab-active: #ffffff; --accent: #2457c5;
+    --warn-bg: #fde7c7; --warn-text: #5a2e00; --err: #c62828; --upd: #1b7f4b;
+    --panel: #ffffff; --ask: #b4236b; --ask-glow: #f3c1dc; --neutral: #6b7683;
+  }
+  /* dark: the colours of the Herdr view around it (herdr-view.css) */
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #101114; --bar: #17191d; --text: #e4e4e6; --muted: #9a9b9e;
+      --line: #2c2e31; --tab: #1d1f23; --tab-active: #262629; --accent: #7fa6ff;
+      --warn-bg: #5a3b0b; --warn-text: #ffe7bf; --err: #ff6b6b; --upd: #4cc38a;
+      --panel: #17191d; --ask: #e0509a; --ask-glow: #5c2342; --neutral: #7d8892;
+    }
+  }
+  html, body { height: 100%; margin: 0; }
+  body { display: flex; flex-direction: column; background: var(--bg);
+         color: var(--text);
+         font: 13px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  button, select, input { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  #herdr { position: fixed; inset: 0; }
+  #content { position: fixed; z-index: 1; display: flex; flex-direction: column;
+             min-width: 0; background: var(--bg); }
+  #content[hidden] { display: none; }
+  #tab-badge { padding: 0 5px; border-radius: 7px; font: 600 11px/14px system-ui, sans-serif;
+               color: #fff; background: var(--err); }
+  #tab-badge[hidden] { display: none; }
+  #notice, #warning, #changes-bar, #offline, #update-bar {
+       display: none; padding: 5px 10px; }
+  #notice.visible, #warning.visible, #changes-bar.visible,
+  #offline.visible,
+  #update-bar.visible {
+       display: flex; gap: 8px; align-items: center; }
+  #offline { background: var(--err); color: #fff; font-weight: 600; }
+  #notice { background: #b45309; color: #fff; }
+  #copied { display: none; position: fixed; left: 50%; bottom: 56px; z-index: 50;
+            transform: translateX(-50%); max-width: min(640px, 90vw); padding: 6px 12px;
+            border: 1px solid var(--line); border-radius: 8px; background: var(--panel);
+            box-shadow: 0 4px 16px rgba(0,0,0,.25); }
+  #copied.visible { display: flex; flex-direction: column; gap: 6px; }
+  #copied textarea { width: 100%; box-sizing: border-box; font: 12px/1.4 ui-monospace, monospace; }
+  #warning { background: var(--warn-bg); color: var(--warn-text); }
+  #changes-bar { background: var(--panel); border-bottom: 1px solid var(--accent); }
+  #changes-dismiss { margin-left: auto; border: 0; background: none; padding: 0 6px;
+                     color: var(--muted); font-size: 16px; line-height: 1; }
+  #changes-dismiss:hover { color: var(--text); background: var(--line); }
+  #update-bar { background: var(--panel); border-bottom: 1px solid var(--accent); }
+  #ask-bar { display: flex; flex-direction: column; gap: 6px; padding: 6px 10px;
+             background: var(--panel); border-bottom: 1px solid var(--line); }
+  #ask-bar[hidden] { display: none; }
+  .ask-card.sent, .result-card.sent { opacity: .6; pointer-events: none; }
+  .ask-row { display: flex; align-items: flex-start; gap: 6px; }
+  .ask-host { flex: 1 1 auto; min-width: 0; }
+  .ask-host > .q { margin: 0; font-weight: 650; white-space: pre-wrap; }
+  .ask-host .details { max-height: 30vh; overflow: auto; }
+  .ask-host .details > * { margin: 0; }
+  .ask-host .details > * + * { margin-top: 6px; }
+  .ask-host .details ul, .ask-host .details ol { padding-left: 1.3rem; }
+  .ask-host .details li + li { margin-top: 5px; }
+  .ask-host .details .lines { white-space: pre-line; }
+  .ask-note { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
+  .ask-note:empty { display: none; }
+  .ask-dismiss { flex: none; border: 0; background: none; padding: 2px 6px;
+                 color: var(--muted); border-radius: 4px; }
+  .ask-dismiss:hover { color: var(--text); background: var(--line); }
+  .ask-line { display: flex; align-items: center; gap: 6px; padding: 4px 10px;
+              border: 1px solid var(--line); border-radius: 14px; background: var(--bg); }
+  .ask-line-text { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+  .ask-line::before { content: "\2713"; color: var(--muted); }
+  main { flex: 1; position: relative; min-width: 0; min-height: 0; }
+  iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0;
+           background: #fff; }
+  /* SES-15: the pages not shown keep their frames, hidden and inert. */
+  main iframe[inert] { visibility: hidden; }
+  #send-button { position: absolute; right: 12px; bottom: 12px; z-index: 4; display: flex;
+       padding: 8px; border: 1px solid var(--accent); border-radius: 50%;
+       background: var(--accent); color: var(--bg); box-shadow: 0 2px 8px rgba(0,0,0,.3); }
+  #send-button[hidden] { display: none; }
+  #send-button:disabled { opacity: .5; cursor: default; }
+  #send-button svg { width: 18px; height: 18px; }
+  #send-toast { position: absolute; left: 50%; bottom: 16px; z-index: 4; transform: translateX(-50%);
+       max-width: 90%; padding: 6px 12px; border-radius: 8px; background: var(--panel);
+       color: var(--text); border: 1px solid var(--accent); box-shadow: 0 2px 8px rgba(0,0,0,.3);
+       pointer-events: none; opacity: 0; transition: opacity .4s; }
+  #send-toast.visible { opacity: 1; transition: none; }
+  #send-toast.error { background: var(--warn-bg); color: var(--warn-text); border-color: var(--warn-text); }
+  /* clicks in the shell's own parts never leave a text selection behind */
+  #herdr, #comment-panel, #send-button, #send-toast { user-select: none; -webkit-user-select: none; }
+  #comment-panel textarea, #comment-panel input { user-select: text; -webkit-user-select: text; }
+</style>
+<link rel="stylesheet" href="/static/comments.css">
+<link rel="stylesheet" href="/static/files.css">
+<link rel="stylesheet" href="/static/keys.css">
+</head>
+<body>
+<div id="herdr"></div>
+<div id="content">
+<span id="tab-badge" role="status" aria-label="page errors" hidden>!</span>
+<div id="offline" role="alert">
+  Not connected to the hub. Feedback you give now is kept and sent when the hub is back.
+</div>
+<div id="notice" role="alert">
+  <span id="notice-text"></span>
+  <button id="notice-reload" type="button">Reload page</button>
+</div>
+<div id="warning" role="status"></div>
+<div id="copied" role="status"></div>
+<div id="changes-bar" role="status"><span id="changes-text"></span>
+  <button id="changes-dismiss" type="button" title="Hide the change marks"
+          aria-label="Hide the change marks">×</button>
+</div>
+<div id="update-bar" role="status">
+  <span>agent-canvas was updated.</span>
+  <button id="update-reload" type="button">Reload</button>
+  <button id="update-cancel" type="button" hidden>Cancel</button>
+</div>
+<div id="ask-bar" role="region" aria-label="Questions" hidden></div>
+<div id="mid">
+<main>
+<button id="send-button" type="button" hidden data-key-action="send.now"
+        title="Send the comments and page actions to the agent (Ctrl+Enter)"
+        aria-label="Send to agent"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/></svg></button>
+<div id="send-toast" role="status"></div>
+</main>
+<aside id="comment-panel" aria-label="Comments" hidden></aside>
+</div>
+</div>
+<script src="/static/keymap.js"></script>
+<script src="/static/comments.js"></script>
+<script src="/static/comment-feature.js"></script>
+<script src="/static/answers.js"></script>
+<script src="/static/draw.js"></script>
+<script src="/static/files.js"></script>
+<script src="/static/keys.js"></script>
+<script src="/static/contents.js"></script>
+<script src="/static/render.js"></script>
+<script src="/static/outbox.js"></script>
+<script src="/static/update.js"></script>
+<script src="/static/herdr-view.js"></script>
+<script src="/static/shell.js"></script>
+<script type="module" src="/static/cards.js"></script>
+</body>
+</html>

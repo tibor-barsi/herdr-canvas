@@ -1,0 +1,7 @@
+{"herdr-app":{"value":{"spaces":[{"id":"sp1","tabs":[
+{"id":"tb1","root":{"type":"row","id":"tb1","children":[
+ {"type":"block","id":"p1","content":{"terminal":"t2"},"size":{"weight":1.0}},
+ {"type":"column","id":"c1","size":{"weight":2.0},"children":[
+  {"type":"block","id":"p2","content":{"terminal":"t3"},"size":{"weight":3.0}}]}]}},
+{"id":"tb2","root":{"type":"row","id":"tb2","children":[
+ {"type":"block","id":"other","content":{"terminal":"t9"},"size":{"weight":1.0}}]}}]}]},"version":19}}

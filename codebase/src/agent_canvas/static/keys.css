@@ -1,0 +1,27 @@
+/* The key overview (KEY-03). */
+#key-help { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center;
+            justify-content: center; background: rgba(0, 0, 0, .35); outline: none; }
+.key-help-box { max-width: min(90vw, 40em); max-height: 90vh; overflow: auto; padding: 12px 18px;
+                background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+                box-shadow: 0 6px 24px rgba(0, 0, 0, .3); }
+.key-help-box h2 { margin: 0 0 8px; font-size: 15px; }
+.key-help-box h3 { margin: 10px 0 4px; font-size: 12px; color: var(--muted); }
+.key-help-box dl { display: grid; grid-template-columns: max-content 1fr; gap: 3px 14px; margin: 0; }
+.key-help-box dt, .key-help-box dd { margin: 0; }
+.key-help-box kbd { padding: 0 5px; border: 1px solid var(--line); border-radius: 4px;
+                    background: var(--tab); font: 600 12px/18px monospace; }
+.key-help-problems { margin: 10px 0 0; font-size: 12px; color: #b45309; }
+.key-help-note { margin: 10px 0 0; font-size: 12px; color: var(--muted); }
+
+/* The table of contents of the page (KEY-05). */
+#page-contents { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center;
+                 justify-content: center; background: rgba(0, 0, 0, .35); outline: none; }
+#page-contents .key-help-box { width: min(90vw, 30em); }
+#page-contents ul { margin: 0; padding: 0; list-style: none; }
+#page-contents li { padding: 3px 8px; border-radius: 4px; cursor: pointer; white-space: nowrap;
+                    overflow: hidden; text-overflow: ellipsis; padding-left: calc(8px + var(--indent) * 14px); }
+#page-contents li[aria-selected=true] { background: var(--tab); outline: 1px solid var(--line); }
+.key-help-box dt.sel kbd { border-color: var(--accent); }
+.key-help-box dd.sel { color: var(--accent); font-weight: 600; }
+.key-help-profile { margin: 0 0 4px; font-size: 12px; }
+.key-help-status { margin: 0 0 6px; min-height: 1.4em; font-size: 12px; color: var(--accent); }

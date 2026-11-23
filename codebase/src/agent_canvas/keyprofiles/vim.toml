@@ -1,0 +1,9 @@
+# Only what differs from herdr.toml; every other action keeps its herdr key.
+# While commenting, the comment keys come first (L is the lasso there).
+description = "Herdr's keys, and H J K L move between cards"
+
+[keys]
+"pane.go:left" = ["Alt+h", "Alt+ArrowLeft", "H"]
+"pane.go:right" = ["Alt+l", "Alt+ArrowRight", "L"]
+"pane.go:up" = ["Alt+k", "Alt+ArrowUp", "K"]
+"pane.go:down" = ["Alt+j", "Alt+ArrowDown", "J"]

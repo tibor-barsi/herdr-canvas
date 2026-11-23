@@ -1,0 +1,48 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "timeout": 5,
+            "command": "command -v agent-canvas >/dev/null 2>&1 || { echo '{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"agent-canvas is not installed, so the canvas is unavailable. If the owner asks for it, tell them to run: uv tool install <path to agent-canvas>/codebase (see the plugin README).\"}}'; exit 0; }; agent-canvas hook session-start || exit 0"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "timeout": 5,
+            "command": "command -v agent-canvas >/dev/null 2>&1 || exit 0; agent-canvas hook user-prompt-submit || exit 0"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "timeout": 5,
+            "command": "command -v agent-canvas >/dev/null 2>&1 || exit 0; agent-canvas hook stop || exit 0"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "timeout": 5,
+            "command": "command -v agent-canvas >/dev/null 2>&1 || exit 0; agent-canvas hook session-end || exit 0"
+          }
+        ]
+      }
+    ]
+  }
+}

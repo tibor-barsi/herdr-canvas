@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Results</title>
+<link rel="stylesheet" href="/static/kit/kit.css">
+</head>
+<body>
+<main class="page">
+  <h1>Results: what was computed (replace)</h1>
+  <p class="lead">The finding in one or two sentences, with the number that
+    matters most. (replace)</p>
+
+  <section class="tiles">
+    <div class="tile good">
+      <b class="value">12.4</b><span class="unit">Hz</span>
+      <span class="label">First natural frequency</span>
+    </div>
+    <div class="tile warn">
+      <b class="value">0.8</b><span class="unit">%</span>
+      <span class="label">Damping ratio</span>
+    </div>
+    <div class="tile bad">
+      <b class="value">3.1</b><span class="unit">mm</span>
+      <span class="label">Peak deflection</span>
+    </div>
+    <div class="tile">
+      <b class="value">42</b>
+      <span class="label">Runs</span>
+    </div>
+  </section>
+
+  <div class="callout warn">
+    <strong>Check:</strong> one caveat the owner should know before trusting the
+    numbers. (replace)
+  </div>
+
+  <section class="columns">
+    <figure>
+      <canvas-plot data-canvas-id="response">
+        <script type="application/json">
+        {"data": [
+           {"x": [1, 2, 3, 4, 5], "y": [2, 5, 3, 6, 4], "mode": "lines+markers",
+            "name": "measured"},
+           {"x": [1, 2, 3, 4, 5], "y": [2.2, 4.5, 3.4, 5.5, 4.3], "mode": "lines",
+            "name": "model"}],
+         "layout": {"xaxis": {"title": {"text": "f (Hz)"}},
+                    "yaxis": {"title": {"text": "A (mm)"}}}}
+        </script>
+      </canvas-plot>
+      <figcaption>Figure 1. What the curves show. (replace)</figcaption>
+    </figure>
+    <div class="stack">
+      <canvas-table data-canvas-id="runs">
+        <script type="application/json">
+        {"columns": ["run", "f (Hz)", "error (%)"],
+         "rows": [["r1", 12.4, 0.8], ["r2", 12.9, 1.1], ["r3", 13.2, 2.4]],
+         "key": "run", "select": "single"}
+        </script>
+      </canvas-table>
+      <p class="small muted">Click a row to point at it in your next message.</p>
+    </div>
+  </section>
+
+  <details>
+    <summary>Method and settings</summary>
+    <p>Solver, mesh, boundary conditions, versions. (replace)</p>
+  </details>
+</main>
+</body>
+</html>

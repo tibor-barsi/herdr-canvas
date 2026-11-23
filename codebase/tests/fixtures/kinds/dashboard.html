@@ -1,0 +1,33 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Cards of the five kinds</title>
+<link rel="stylesheet" href="/static/kit/kit.css">
+</head><body><div class="page">
+<h1>Cards of the five kinds</h1>
+
+<canvas-ask data-canvas-id="q-infill"><script type="application/json">{"question": "Which infill pattern for the bracket?", "context": "Both print in about 4 h.\n- Gyroid is stiffer\n- Lines print faster\n1. First choice\n2. Second choice", "options": [{"id": "gyroid", "label": "Gyroid", "description": "stiffer"}, {"id": "rect", "label": "Rectilinear"}, {"id": "lines", "label": "Lines", "description": "prints faster"}], "recommended": "gyroid"}</script></canvas-ask>
+
+<canvas-do data-canvas-id="w-heater"><script type="application/json">{"title": "Re-seat the heater plug on the print bed", "why": "The bed does not hold its temperature."}</script></canvas-do>
+
+<canvas-report data-canvas-id="r-result"><script type="application/json">{"type": "result", "title": "Tensile test, run 7: yield at 131 MPa", "text": "Stress levels off after 3 % strain; <b>the specimen</b> failed at 152 MPa. Plot below."}</script>
+<canvas-plot data-canvas-id="r-plot"><script type="application/json">{"data": [{"x": [0, 1, 2, 3, 4, 5], "y": [0, 48, 92, 131, 150, 152], "mode": "lines+markers", "name": "run 7"}], "layout": {"height": 190, "xaxis": {"title": {"text": "strain (%)"}}, "yaxis": {"title": {"text": "stress (MPa)"}}}}</script></canvas-plot>
+</canvas-report>
+
+<canvas-decision data-canvas-id="d-mat"><script type="application/json">{"text": "I chose PETG for the housing", "why": "It is tough enough for the snap fits and prints without an enclosure.", "ref": "d-mat", "date": "2026-11-09"}</script></canvas-decision>
+
+<canvas-alert data-canvas-id="a-bed"><script type="application/json">{"title": "Bed temperature fell to 42 °C (limit 60 °C)", "text": "The heater has recovered since. I keep watching it."}</script></canvas-alert>
+
+<canvas-live data-canvas-id="l-job"><script type="application/json">{"title": "Job and limits", "text": "Updates in place; nothing to answer."}</script>
+<canvas-table data-canvas-id="l-table"><script type="application/json">{"columns": ["limit", "value", "now"], "rows": [["bed", "60 °C", "58 °C"], ["nozzle", "250 °C", "247 °C"]]}</script></canvas-table>
+<canvas-progress data-canvas-id="l-prog"><script type="application/json">{"value": 6, "max": 10, "label": "Print job 14: bracket_v3", "status": "running", "detail": "layer 312 of 520"}</script></canvas-progress>
+</canvas-live>
+
+<canvas-report data-canvas-id="r-plan"><script type="application/json">{"type": "plan", "title": "Plan to build the fixture", "text": "1. Print 3 bracket variants (about 4 h)\n2. Pull-test each to failure\n3. Pick the lightest that holds 150 N"}</script>
+<canvas-ask data-canvas-id="q-plan"><script type="application/json">{"question": "Approve this plan?", "form": "approve"}</script></canvas-ask>
+</canvas-report>
+
+<canvas-alert data-canvas-id="a-heater"><script type="application/json">{"title": "Bed heater is not holding temperature", "text": "It dropped to 42 °C."}</script>
+<canvas-do data-canvas-id="w-plug"><script type="application/json">{"title": "Check the heater plug", "where": "the printer, bench 2", "steps": [{"text": "Switch off the printer"}, {"text": "Read the plug temperature", "run": "uv run check-heater --bed 60", "expect": "exit 0"}]}</script></canvas-do>
+</canvas-alert>
+
+<canvas-report data-canvas-id="r-finding"><script type="application/json">{"type": "finding", "title": "The second mode is damped more than the first"}</script></canvas-report>
+</div></body></html>

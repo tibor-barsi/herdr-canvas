@@ -1,0 +1,539 @@
+{
+ "schema": "agent-canvas/home@1",
+ "now": "2026-11-08T14:00:00.000Z",
+ "projects": [
+  {
+   "key": "/home/user/data/projects/agent-canvas",
+   "name": "agent-canvas",
+   "colour": null,
+   "pin": null,
+   "hidden": null
+  },
+  {
+   "key": "/home/user/data/projects/meeting-planner",
+   "name": "meeting-planner",
+   "colour": null,
+   "pin": null,
+   "hidden": null
+  },
+  {
+   "key": "/home/user/data/projects/tool-rack",
+   "name": "tool-rack",
+   "colour": null,
+   "pin": null,
+   "hidden": null
+  },
+  {
+   "key": "/home/user/data/projects/mail-helper",
+   "name": "mail-helper",
+   "colour": null,
+   "pin": null,
+   "hidden": null
+  },
+  {
+   "key": "/home/user/data/projects/gatehouse",
+   "name": "gatehouse",
+   "colour": null,
+   "pin": null,
+   "hidden": null
+  }
+ ],
+ "sessions": [
+  {
+   "id": "87a02543",
+   "project": "/home/user/data/projects/meeting-planner",
+   "agent": "claude-code",
+   "title": "Meetings and notes 2030\u201331",
+   "state": "ended",
+   "since": "2026-11-08T10:50:00.000Z",
+   "started": "2026-11-08T08:00:00.000Z",
+   "ended": "2026-11-08T10:50:00.000Z",
+   "place": "lane",
+   "live": true,
+   "need": null,
+   "herdr": false,
+   "tab_hidden": false,
+   "active_page": "draft-candidates-87a02543.html",
+   "pages": [
+    {
+     "name": "draft-candidates-87a02543.html",
+     "title": "Draft candidates",
+     "version": 1,
+     "created": "2026-11-08T04:05:00.000Z",
+     "made_by": null,
+     "thumb": null
+    }
+   ],
+   "shells": [],
+   "subagents": []
+  },
+  {
+   "id": "c67938e4",
+   "project": "/home/user/data/projects/mail-helper",
+   "agent": "claude-code",
+   "title": "Product showcase site",
+   "state": "needs-you",
+   "since": "2026-11-08T13:56:00.000Z",
+   "started": "2026-11-08T08:01:00.000Z",
+   "ended": null,
+   "place": "lane",
+   "live": true,
+   "need": {
+    "kind": "question",
+    "text": "Which hero image: A, B or C?"
+   },
+   "herdr": false,
+   "tab_hidden": false,
+   "active_page": "site-map-c67938e4.html",
+   "pages": [
+    {
+     "name": "hero-options-c67938e4.coder.html",
+     "title": "Hero options",
+     "version": 1,
+     "created": "2026-11-08T04:10:00.000Z",
+     "made_by": "c67938e4.coder",
+     "thumb": null
+    },
+    {
+     "name": "palette-c67938e4.design.html",
+     "title": "Palette",
+     "version": 1,
+     "created": "2026-11-08T04:15:00.000Z",
+     "made_by": "c67938e4.design",
+     "thumb": null
+    },
+    {
+     "name": "site-map-c67938e4.html",
+     "title": "Site map",
+     "version": 1,
+     "created": "2026-11-08T04:20:00.000Z",
+     "made_by": null,
+     "thumb": null
+    }
+   ],
+   "shells": [],
+   "subagents": [
+    {
+     "id": "c67938e4.coder",
+     "parent": null,
+     "type": "coder",
+     "task": "render three hero variants",
+     "state": "ended",
+     "since": "2026-11-08T14:00:00.000Z",
+     "need": null
+    },
+    {
+     "id": "c67938e4.design",
+     "parent": null,
+     "type": "designer",
+     "task": "palette study",
+     "state": "working",
+     "since": "2026-11-08T13:54:00.000Z",
+     "need": null
+    }
+   ]
+  },
+  {
+   "id": "d9d67027",
+   "project": "/home/user/data/projects/mail-helper",
+   "agent": "claude-code",
+   "title": "Tool news: features and how to use them",
+   "state": "working",
+   "since": "2026-11-08T13:48:00.000Z",
+   "started": "2026-11-08T08:02:00.000Z",
+   "ended": null,
+   "place": "lane",
+   "live": true,
+   "need": null,
+   "herdr": false,
+   "tab_hidden": false,
+   "active_page": "digest-draft-d9d67027.w.html",
+   "pages": [
+    {
+     "name": "release-notes-d9d67027.r1.html",
+     "title": "Release notes",
+     "version": 1,
+     "created": "2026-11-08T04:25:00.000Z",
+     "made_by": "d9d67027.r1",
+     "thumb": null
+    },
+    {
+     "name": "hook-events-d9d67027.r2.html",
+     "title": "Hook events",
+     "version": 1,
+     "created": "2026-11-08T04:30:00.000Z",
+     "made_by": "d9d67027.r2",
+     "thumb": null
+    },
+    {
+     "name": "hook-payloads-d9d67027.r2.html",
+     "title": "Hook payloads",
+     "version": 1,
+     "created": "2026-11-08T04:35:00.000Z",
+     "made_by": "d9d67027.r2",
+     "thumb": null
+    },
+    {
+     "name": "stop-event-d9d67027.r2.html",
+     "title": "Stop event",
+     "version": 1,
+     "created": "2026-11-08T04:40:00.000Z",
+     "made_by": "d9d67027.r2",
+     "thumb": null
+    },
+    {
+     "name": "session-start-d9d67027.r2.html",
+     "title": "Session start",
+     "version": 1,
+     "created": "2026-11-08T04:45:00.000Z",
+     "made_by": "d9d67027.r2",
+     "thumb": null
+    },
+    {
+     "name": "subagent-events-d9d67027.r2.html",
+     "title": "Subagent events",
+     "version": 1,
+     "created": "2026-11-08T04:50:00.000Z",
+     "made_by": "d9d67027.r2",
+     "thumb": null
+    },
+    {
+     "name": "notification-d9d67027.r2.html",
+     "title": "Notification",
+     "version": 1,
+     "created": "2026-11-08T04:55:00.000Z",
+     "made_by": "d9d67027.r2",
+     "thumb": null
+    },
+    {
+     "name": "permission-request-d9d67027.r2.html",
+     "title": "Permission request",
+     "version": 1,
+     "created": "2026-11-08T05:00:00.000Z",
+     "made_by": "d9d67027.r2",
+     "thumb": null
+    },
+    {
+     "name": "changelog-diff-d9d67027.r2.html",
+     "title": "Changelog diff",
+     "version": 1,
+     "created": "2026-11-08T05:05:00.000Z",
+     "made_by": "d9d67027.r2",
+     "thumb": null
+    },
+    {
+     "name": "summary-table-d9d67027.r2.html",
+     "title": "Summary table",
+     "version": 1,
+     "created": "2026-11-08T05:10:00.000Z",
+     "made_by": "d9d67027.r2",
+     "thumb": null
+    },
+    {
+     "name": "digest-draft-d9d67027.w.html",
+     "title": "Digest draft",
+     "version": 1,
+     "created": "2026-11-08T05:15:00.000Z",
+     "made_by": "d9d67027.w",
+     "thumb": null
+    }
+   ],
+   "shells": [],
+   "subagents": [
+    {
+     "id": "d9d67027.r1",
+     "parent": null,
+     "type": "researcher",
+     "task": "collect release notes",
+     "state": "working",
+     "since": "2026-11-08T13:49:00.000Z",
+     "need": null
+    },
+    {
+     "id": "d9d67027.r2",
+     "parent": null,
+     "type": "researcher",
+     "task": "summarise hook changes",
+     "state": "working",
+     "since": "2026-11-08T13:51:00.000Z",
+     "need": null
+    },
+    {
+     "id": "d9d67027.w",
+     "parent": null,
+     "type": "writer",
+     "task": "draft the digest",
+     "state": "ended",
+     "since": "2026-11-08T14:00:00.000Z",
+     "need": null
+    }
+   ]
+  },
+  {
+   "id": "5cc67b63",
+   "project": "/home/user/data/projects/mail-helper",
+   "agent": "claude-code",
+   "title": "Review workflow vs. release playbook",
+   "state": "turn-done",
+   "since": "2026-11-08T11:55:00.000Z",
+   "started": "2026-11-08T08:03:00.000Z",
+   "ended": null,
+   "place": "lane",
+   "live": true,
+   "need": null,
+   "herdr": false,
+   "tab_hidden": false,
+   "active_page": "playbook-outline-5cc67b63.html",
+   "pages": [
+    {
+     "name": "playbook-outline-5cc67b63.html",
+     "title": "Playbook outline",
+     "version": 1,
+     "created": "2026-11-08T05:20:00.000Z",
+     "made_by": null,
+     "thumb": null
+    }
+   ],
+   "shells": [],
+   "subagents": []
+  },
+  {
+   "id": "3e13eb32",
+   "project": "/home/user/data/projects/tool-rack",
+   "agent": "claude-code",
+   "title": "Rack progress: base-plate + oven-simulation",
+   "state": "working",
+   "since": "2026-11-08T13:25:00.000Z",
+   "started": "2026-11-08T08:04:00.000Z",
+   "ended": null,
+   "place": "lane",
+   "live": true,
+   "need": null,
+   "herdr": false,
+   "tab_hidden": false,
+   "active_page": "progress-overview-3e13eb32.html",
+   "pages": [
+    {
+     "name": "plate-stress-map-3e13eb32.plate.html",
+     "title": "Plate stress map",
+     "version": 1,
+     "created": "2026-11-08T05:25:00.000Z",
+     "made_by": "3e13eb32.plate",
+     "thumb": null
+    },
+    {
+     "name": "chamber-temperature-3e13eb32.chamber.html",
+     "title": "Chamber temperature",
+     "version": 1,
+     "created": "2026-11-08T05:30:00.000Z",
+     "made_by": "3e13eb32.chamber",
+     "thumb": null
+    },
+    {
+     "name": "chamber-mesh-3e13eb32.mesh.html",
+     "title": "Chamber mesh",
+     "version": 1,
+     "created": "2026-11-08T05:35:00.000Z",
+     "made_by": "3e13eb32.mesh",
+     "thumb": null
+    },
+    {
+     "name": "mesh-check-3e13eb32.rev.html",
+     "title": "Mesh check",
+     "version": 1,
+     "created": "2026-11-08T05:40:00.000Z",
+     "made_by": "3e13eb32.rev",
+     "thumb": null
+    },
+    {
+     "name": "progress-overview-3e13eb32.html",
+     "title": "Progress overview",
+     "version": 1,
+     "created": "2026-11-08T05:45:00.000Z",
+     "made_by": null,
+     "thumb": null
+    }
+   ],
+   "shells": [],
+   "subagents": [
+    {
+     "id": "3e13eb32.plate",
+     "parent": null,
+     "type": "coder",
+     "task": "base-plate stress model",
+     "state": "working",
+     "since": "2026-11-08T13:30:00.000Z",
+     "need": null
+    },
+    {
+     "id": "3e13eb32.chamber",
+     "parent": null,
+     "type": "coder",
+     "task": "chamber thermal simulation",
+     "state": "working",
+     "since": "2026-11-08T13:32:00.000Z",
+     "need": null
+    },
+    {
+     "id": "3e13eb32.mesh",
+     "parent": "3e13eb32.chamber",
+     "type": "mesher",
+     "task": "refine chamber mesh",
+     "state": "working",
+     "since": "2026-11-08T13:50:00.000Z",
+     "need": null
+    },
+    {
+     "id": "3e13eb32.rev",
+     "parent": null,
+     "type": "reviewer",
+     "task": "check mesh convergence",
+     "state": "ended",
+     "since": "2026-11-08T14:00:00.000Z",
+     "need": null
+    }
+   ]
+  },
+  {
+   "id": "23ab2306",
+   "project": "/home/user/data/projects/tool-rack",
+   "agent": "claude-code",
+   "title": "Hardware dashboard",
+   "state": "needs-you",
+   "since": "2026-11-08T13:42:00.000Z",
+   "started": "2026-11-08T08:05:00.000Z",
+   "ended": null,
+   "place": "lane",
+   "live": true,
+   "need": {
+    "kind": "question",
+    "text": "Use the 24 V or the 48 V bus for the heaters?"
+   },
+   "herdr": false,
+   "tab_hidden": false,
+   "active_page": "can-chain-23ab2306.html",
+   "pages": [
+    {
+     "name": "connector-table-23ab2306.ex.html",
+     "title": "Connector table",
+     "version": 1,
+     "created": "2026-11-08T05:50:00.000Z",
+     "made_by": "23ab2306.ex",
+     "thumb": null
+    },
+    {
+     "name": "power-diagram-23ab2306.html",
+     "title": "Power diagram",
+     "version": 1,
+     "created": "2026-11-08T05:55:00.000Z",
+     "made_by": null,
+     "thumb": null
+    },
+    {
+     "name": "can-chain-23ab2306.html",
+     "title": "CAN chain",
+     "version": 1,
+     "created": "2026-11-08T06:00:00.000Z",
+     "made_by": null,
+     "thumb": null
+    }
+   ],
+   "shells": [],
+   "subagents": [
+    {
+     "id": "23ab2306.ex",
+     "parent": null,
+     "type": "explore",
+     "task": "read the connector list",
+     "state": "ended",
+     "since": "2026-11-08T14:00:00.000Z",
+     "need": null
+    }
+   ]
+  },
+  {
+   "id": "ec9389c5",
+   "project": "/home/user/data/projects/gatehouse",
+   "agent": "claude-code",
+   "title": "Network routing notes",
+   "state": "turn-done",
+   "since": "2026-11-08T09:00:00.000Z",
+   "started": "2026-11-08T08:06:00.000Z",
+   "ended": null,
+   "place": "lane",
+   "live": true,
+   "need": null,
+   "herdr": false,
+   "tab_hidden": false,
+   "active_page": null,
+   "pages": [],
+   "shells": [],
+   "subagents": []
+  },
+  {
+   "id": "f956eab3",
+   "project": "/home/user/data/projects/agent-canvas",
+   "agent": "claude-code",
+   "title": "Home page mockups",
+   "state": "working",
+   "since": "2026-11-08T13:58:00.000Z",
+   "started": "2026-11-08T08:07:00.000Z",
+   "ended": null,
+   "place": "lane",
+   "live": true,
+   "need": null,
+   "herdr": false,
+   "tab_hidden": false,
+   "active_page": "design-brief-f956eab3.html",
+   "pages": [
+    {
+     "name": "home-layouts-f956eab3.coder.html",
+     "title": "Home layouts",
+     "version": 1,
+     "created": "2026-11-08T06:05:00.000Z",
+     "made_by": "f956eab3.coder",
+     "thumb": null
+    },
+    {
+     "name": "design-brief-f956eab3.html",
+     "title": "Design brief",
+     "version": 1,
+     "created": "2026-11-08T06:10:00.000Z",
+     "made_by": null,
+     "thumb": null
+    }
+   ],
+   "shells": [],
+   "subagents": [
+    {
+     "id": "f956eab3.coder",
+     "parent": null,
+     "type": "coder",
+     "task": "build the prototype pages",
+     "state": "working",
+     "since": "2026-11-08T13:48:00.000Z",
+     "need": null
+    }
+   ]
+  },
+  {
+   "id": "4c67137b",
+   "project": "/home/user/data/projects/gatehouse",
+   "agent": "claude-code",
+   "title": "Hub: functionality questions, round 1",
+   "state": "turn-done",
+   "since": "2026-11-08T13:30:00.000Z",
+   "started": "2026-11-08T08:08:00.000Z",
+   "ended": null,
+   "place": "lane",
+   "live": true,
+   "need": null,
+   "herdr": false,
+   "tab_hidden": false,
+   "active_page": null,
+   "pages": [],
+   "shells": [],
+   "subagents": []
+  }
+ ]
+}
