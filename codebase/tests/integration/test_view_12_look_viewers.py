@@ -65,7 +65,7 @@ def test_view_12_a_look_loads_the_viewer_document_and_runs_no_page_checks(
     [request] = shell.requests
     assert (
         request["url"]
-        == hub.state.frame_url(session["id"], "report.pdf") + "?ac-view=1"
+        == hub.state.frame_url(hub.pool_of(session["id"]), "report.pdf") + "?ac-view=1"
     )
     assert request["audit"] is False
     assert answer["audit"] is None and answer["viewer_error"] is None

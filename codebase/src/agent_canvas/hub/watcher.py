@@ -123,7 +123,7 @@ class PageHistory:
         if not numbers:
             return None
         newest = max(numbers)
-        return newest, self._path(page, newest).read_bytes()
+        return newest, self.path(page, newest).read_bytes()
 
     def save(self, page: str, content: bytes) -> int | None:
         """
@@ -146,7 +146,7 @@ class PageHistory:
             return None
         number = 1 if newest is None else newest[0] + 1
         make_private_dirs(self._directory)
-        target = self._path(page, number)
+        target = self.path(page, number)
         write_safely(target, content)
         return number
 
@@ -160,18 +160,19 @@ class PageHistory:
             Version number and modification time (seconds since the epoch).
         """
         return [
-            (number, self._path(page, number).stat().st_mtime)
+            (number, self.path(page, number).stat().st_mtime)
             for number in sorted(self._numbers(page))
         ]
 
     def read(self, page: str, number: int) -> bytes | None:
         """Return the content of version ``number`` of ``page``, or None."""
         try:
-            return self._path(page, number).read_bytes()
+            return self.path(page, number).read_bytes()
         except OSError:
             return None
 
-    def _path(self, page: str, number: int) -> Path:
+    def path(self, page: str, number: int) -> Path:
+        """Return the file of version ``number`` of ``page``."""
         return self._directory / f"{Path(page).stem}.{number:04d}{_extension(page)}"
 
     def _numbers(self, page: str) -> list[int]:

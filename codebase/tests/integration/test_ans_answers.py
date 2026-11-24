@@ -93,7 +93,15 @@ class Shown:
         return found[0]
 
     def events(self) -> list[dict]:
-        return self.hub.on_loop(lambda: self.hub.state.events.all(self.id))
+        """The card's events: its own, then those for it in its pool's log."""
+
+        def collect() -> list[dict]:
+            events = self.hub.state.events
+            pool = events.pool_of(self.id)
+            pooled = events.all(pool) if pool else []
+            return events.all(self.id) + [e for e in pooled if e.get("for") == self.id]
+
+        return self.hub.on_loop(collect)
 
     def delivered_via(self, event_id: str) -> str | None:
         for line in (self.folder / "events.jsonl").read_text().splitlines():
@@ -180,7 +188,8 @@ def test_ans_01_an_answer_makes_an_event_and_is_stored_per_page(shown) -> None: 
 
 def test_ans_01_the_answers_file_is_not_served_to_the_page(shown, hub) -> None:  # noqa: ANN001
     shown.answer("q1", KEEP)
-    token = hub.state.session_of(shown.id).page_token
+    pool = hub.on_loop(lambda: hub.state.events.pool_of(shown.id))
+    token = hub.state.session_of(pool).page_token  # the page is the pool's
     base = f"http://localhost:{hub.port}/s/{token}"
     assert httpx.get(f"{base}/page.html").status_code == 200
     assert httpx.get(f"{base}/.answers/page.html.json").status_code == 404

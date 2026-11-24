@@ -18,21 +18,22 @@ from mcp import Client, ClientSession, StdioServerParameters, stdio_client
 
 from agent_canvas.hub import clock
 from agent_canvas.mcp_server import create_server
+from helpers import own_draft
 
 pytestmark = pytest.mark.integration
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"fake-image-bytes"
 TOOLS = {
     "session_start": ({"agent", "title", "project"}, set()),
-    "session_path": ({"session", "project_page"}, set()),
+    "session_path": ({"session"}, set()),
     "session_set_title": ({"session", "title"}, {"title"}),
     "session_end": ({"session"}, set()),
     "show": (
-        {"session", "page", "title", "publish", "audit", "kind", "project_page"},
+        {"session", "page", "title", "publish", "audit", "kind"},
         set(),
     ),
     "page": (
-        {"session", "action", "name", "kind", "archived", "project_page"},
+        {"session", "action", "name", "kind", "archived"},
         {"action"},
     ),
     "ask": (
@@ -64,7 +65,6 @@ TOOLS = {
             "height",
             "scheme",
             "audit",
-            "project_page",
         },
         set(),
     ),
@@ -72,14 +72,14 @@ TOOLS = {
         {"older_than", "delete_session", "project", "yes", "force"},
         set(),
     ),
-    "comments": ({"session", "page", "all", "project_page"}, set()),
+    "comments": ({"session", "page", "all"}, set()),
     "comment_reply": (
-        {"session", "page", "n", "text", "done", "from", "project_page"},
+        {"session", "page", "n", "text", "done", "from"},
         {"page", "n", "text"},
     ),
-    "comment_done": ({"session", "page", "n", "project_page"}, {"page", "n"}),
+    "comment_done": ({"session", "page", "n"}, {"page", "n"}),
     "answers": (
-        {"session", "page", "open", "wait", "ids", "timeout_s", "project_page"},
+        {"session", "page", "open", "wait", "ids", "timeout_s"},
         set(),
     ),
 }
@@ -155,6 +155,8 @@ def new_session() -> str:
     """Create a session with a page through the tool and return its id."""
     data = payload(call("session_start"))
     (Path(data["folder"]) / "page.html").write_text("<p>x</p>")
+    # Showing the page makes the session a toucher of it, so it takes its feedback.
+    call("show", session=data["session"], page="page.html", audit=False)
     return data["session"]
 
 
@@ -216,9 +218,10 @@ def test_mcp_02_session_start_returns_the_id_and_folder(hub) -> None:  # noqa: A
     result = call("session_start", agent="opencode", title="Bracket")
     assert result.is_error is False
     data = payload(result)
-    assert set(data) == {"session", "folder"}
+    assert set(data) == {"session", "folder", "tag"}
     assert Path(data["folder"]).is_dir()
-    meta = json.loads((Path(data["folder"]) / "session.json").read_text())
+    own = hub.state.session_of(data["session"]).folder  # not the pool's folder
+    meta = json.loads((own / "session.json").read_text())
     assert (meta["agent"], meta["title"]) == ("opencode", "Bracket")
 
 
@@ -382,8 +385,7 @@ def test_mcp_04_max_events_leaves_the_rest_queued(hub, session) -> None:  # noqa
     data = payload(result)
     assert [e["id"] for e in data["events"]] == ids[:2]
     assert hub.event_state(session, ids[2]) == "queued"
-    folder = Path(payload(call("session_path", session=session))["folder"])
-    log = (folder / "events.jsonl").read_text()
+    log = (hub.state.session_of(session).folder / "events.jsonl").read_text()
     assert '"via":"mcp"' in log
 
 
@@ -466,7 +468,8 @@ def test_kit_04_new_page_writes_a_template_and_refuses_to_overwrite(session) -> 
         "new_page", session=session, name="via-mcp", template="run", force=True,
         draft=False,
     )  # fmt: skip
-    assert forced.is_error is False
+    assert forced.is_error is True and "already exists" in payload(forced)["message"]
+    assert "canvas-plot" in Path(data["path"]).read_text()
     listing = payload(call("new_page"))["templates"]
     assert [t["name"] for t in listing] == list(TEMPLATES)
     bad = call("new_page", session=session, name="../x", template="run")
@@ -475,8 +478,8 @@ def test_kit_04_new_page_writes_a_template_and_refuses_to_overwrite(session) -> 
 
 def test_draft_04_new_page_writes_a_draft_by_default(session) -> None:  # noqa: ANN001
     data = payload(call("new_page", session=session, name="idea", template="compare"))
-    assert data["draft"] is True and data["page"] == "idea.draft.html"
-    assert Path(data["path"]).name == "idea.draft.html"
+    assert data["draft"] is True and data["page"] == own_draft(session, "idea")
+    assert Path(data["path"]).name == own_draft(session, "idea")
     assert not (Path(data["path"]).parent / "idea.html").exists()
 
 
@@ -487,8 +490,8 @@ def test_look_08_look_returns_the_json_and_the_picture(hub, session) -> None:  #
     from shellfake import FakeHeadless
 
     hub.app.state.looks.headless = FakeHeadless()
-    folder = hub.state.session_of(session).folder
-    (folder / "page.draft.html").write_text("<p>draft</p>")
+    folder = Path(payload(call("session_path", session=session))["folder"])
+    (folder / own_draft(session)).write_text("<p>draft</p>")
     result = call("look", session=session, draft=True, width=320, height=200)
     assert result.is_error is False
     data = payload(result)
@@ -509,18 +512,21 @@ def test_look_08_a_failed_look_is_an_error_result_without_an_image(
     assert result.is_error is True and images(result) == []
     assert "agent-canvas open" in payload(result)["message"]
     missing = call("look", session=session, draft=True)
-    assert missing.is_error is True and "page.draft.html" in payload(missing)["message"]
+    assert (
+        missing.is_error is True and own_draft(session) in payload(missing)["message"]
+    )
 
 
 def test_look_08_show_publishes_a_draft(session, hub) -> None:  # noqa: ANN001
-    folder = hub.state.session_of(session).folder
-    (folder / "page.draft.html").write_text("<p>better</p>")
+    folder = Path(payload(call("session_path", session=session))["folder"])
+    (folder / own_draft(session)).write_text("<p>better</p>")
     result = call("show", session=session, page="page.html", publish=True)
     assert result.is_error is False and payload(result)["page"] == "page.html"
     assert (folder / "page.html").read_text() == "<p>better</p>"
     missing = call("show", session=session, page="other.html", publish=True)
     assert (
-        missing.is_error is True and "other.draft.html" in payload(missing)["message"]
+        missing.is_error is True
+        and own_draft(session, "other") in payload(missing)["message"]
     )
 
 

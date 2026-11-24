@@ -32,7 +32,7 @@ def shell(hub):  # noqa: ANN001, ANN201
 
 
 def url(hub, name: str, query: str = "") -> str:  # noqa: ANN001
-    token = hub.state.session_of("a").page_token
+    token = hub.state.session_of(hub.pool_of("a")).page_token
     return f"{hub.frame_origin}/s/{token}/{name}{query}"
 
 
@@ -83,7 +83,7 @@ def test_view_01_a_file_never_shown_stays_an_asset(cli, hub, folder, shell) -> N
 def test_view_02_viewer_document_and_file_both_carry_the_csp(cli, hub, folder) -> None:  # noqa: ANN001
     (folder / "notes.md").write_text("# Notes\n")
     assert show(cli, "notes.md").code == 0
-    csp = frame_csp(hub.port, hub.state.session_of("a").page_token)
+    csp = frame_csp(hub.port, hub.state.session_of(hub.pool_of("a")).page_token)
     document = httpx.get(url(hub, "notes.md", "?ac-view=1"))
     plain = httpx.get(url(hub, "notes.md"))
     assert document.headers["content-type"].split(";")[0] == "text/html"
@@ -139,7 +139,7 @@ def test_page_03_html_serving_is_unchanged_by_the_viewer_query(
     body = b"<!doctype html><html><head><title>t</title></head><body>x</body></html>"
     (folder / "page.html").write_bytes(body)
     assert show(cli, "page.html").code == 0
-    csp = frame_csp(hub.port, hub.state.session_of("a").page_token)
+    csp = frame_csp(hub.port, hub.state.session_of(hub.pool_of("a")).page_token)
     for query in ("", "?ac-view=1"):
         answer = httpx.get(url(hub, "page.html", query))
         assert answer.content == inject_helper(body, source_digest(body))
@@ -266,14 +266,20 @@ def test_cli_16_copy_of_a_pdf_is_a_file_and_a_changed_copy_is_version_2(  # noqa
 def test_cli_16_copy_replaces_a_link_in_the_folder_without_writing_through(  # noqa: ANN001
     cli, folder, tmp_path
 ) -> None:
+    precious = b"%PDF-1.4 precious"
     target = tmp_path / "precious.pdf"
-    target.write_bytes(b"precious")
+    target.write_bytes(precious)
+    # The session's own page first: a pool refuses a copy over a page it never touched.
+    (folder / "r.pdf").write_bytes(precious)
+    assert show(cli, "r.pdf").code == 0
+    (folder / "r.pdf").unlink()
     (folder / "r.pdf").symlink_to(target)
     source = tmp_path / "ext" / "r.pdf"
     source.parent.mkdir()
     source.write_bytes(PDF1)
-    assert show(cli, "--copy", str(source)).code == 0
-    assert target.read_bytes() == b"precious"
+    copied = show(cli, "--copy", str(source))
+    assert copied.code == 0, copied.err
+    assert target.read_bytes() == precious
     assert not (folder / "r.pdf").is_symlink()
     assert (folder / "r.pdf").read_bytes() == PDF1
 

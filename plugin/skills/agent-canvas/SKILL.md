@@ -3,25 +3,27 @@ name: agent-canvas
 description: Put questions, decisions, approvals and hand-run checklists to the owner on the agent-canvas window, and show plots, options, geometry, run status and documents to comment on; the owner answers by clicking, commenting and typing, and it comes back to you as feedback. Use it when the owner says "on the canvas", "let me pick", "let me choose", "so I can comment" or "ask me", when something should be seen to be judged (a picture, a comparison, a document), when there are several questions, or when a question can wait for the owner to answer later; not for one-sentence answers, which stay in the terminal.
 ---
 
-agent-canvas is the owner's window for pages you show and answers you get back. Use it when the owner mentions the canvas, when a plot, picture or document says more than text, and for questions, decisions, approvals and hand-run checklists. One-sentence answers, and one quick pick while the owner is at the keyboard, stay in the terminal.
+agent-canvas is the owner's window for pages you show and answers you get back. Use it when the owner mentions the canvas, when a plot, picture or document says more than text, and for questions, decisions, approvals and checklists. One-sentence answers and a quick pick at the keyboard stay in the terminal.
 
-Cards by need: a question or decision is one `canvas-ask` per question (context, `recommended`, and `default` if you can go on without it); steps the owner runs are `canvas-do` (rehearse them first); news is `canvas-report`; your own choice is `canvas-decision`; a problem is `canvas-alert`.
+Cards: one `canvas-ask` per question or decision (`recommended`; `default` if you can go on); `canvas-do` for steps the owner runs (rehearse first); `canvas-report` news; `canvas-decision` your own choice; `canvas-alert` a problem.
 
-Loop: write `NAME.draft.html` in the folder `agent-canvas session path` prints; run `agent-canvas look NAME --draft`, read the PNG, fix every audit `error` and `warn`; run `agent-canvas show NAME --publish`; once it succeeds, tell the owner the page title. Answers come with the owner's next message (no hooks: `pending`). To get them sooner, run Monitor on `agent-canvas watch --timeout 540` (`timeout_ms` 600000); restart it on `renew`.
+Pages belong to the project: run `agent-canvas page list` first; read the current page before drafting it; change a page, never copy it; use specific names.
 
-Don't build answer buttons, text fields or `canvas-choices` with submit for decisions, or ask about anything not visible on that page.
+Loop: write `NAME.TAG.draft.html` (TAG: `agent-canvas session path`) in the folder it prints; run `agent-canvas look NAME --draft`, read the PNG, fix every audit `error` and `warn`; run `agent-canvas show NAME --publish`; once shown, tell the owner the page title. Answers come with the owner's next message (no hooks: `pending`). Sooner: Monitor on `agent-canvas watch --timeout 540` (`timeout_ms` 600000); restart on `renew`.
 
-Full guide: `agent-canvas guide` (the skill); blocks: `agent-canvas guide blocks`.
+No answer buttons, text fields or `canvas-choices` with submit; ask only about what the page shows.
+
+Guide: `agent-canvas guide`; blocks: `agent-canvas guide blocks`.
 
 ## The loop, worked through
 
 The owner has to choose the infill for a bracket.
 
 **Draft.** `agent-canvas session path` (MCP: `session_path`) prints
-`{"session": ..., "folder": ...}`, the folder being
-`<project>/.agent-canvas/<session>/`. Write `infill.draft.html` there with your
-own file-writing tool (Claude Code: Write/Edit), not with shell commands such as
-`cat > file` or heredocs. The owner never sees a draft.
+`{"session": ..., "folder": ..., "tag": ...}`, the folder being the project's
+page folder in `<project>/.agent-canvas/`. Write `infill.TAG.draft.html` there
+(your `tag`) with your own file-writing tool (Claude Code: Write/Edit), not with
+shell commands such as `cat > file` or heredocs. The owner never sees a draft.
 
 ```html
 <title>Infill for the bracket</title>
@@ -71,9 +73,8 @@ Act on the answers, todos and changes above, say so in your reply, and record de
    waits as needs you: watch for it, or tell the owner to reply when done.
    `agent-canvas answers [--open]` lists answers; `agent-canvas answers --wait
    [ID...] --timeout N` blocks until each is answered (exit 6 at the timeout).
-   Use the terminal question tool for one quick pick while the owner is at the
-   keyboard, a `canvas-ask` when it needs a picture, there are several
-   questions, or it can wait. The `ask` command is not the `canvas-ask` card: it
+   Use the terminal question tool for one quick pick, a `canvas-ask` when it
+   needs a picture, there are several questions, or it can wait. The `ask` command is not the `canvas-ask` card: it
    puts one question in the window and waits. Do not make answer buttons by
    hand, write a Do `run` without `where`, or put secrets in fields (`secret:
    true` tells the owner to type it); record decisions in the project's
@@ -89,14 +90,15 @@ Act on the answers, todos and changes above, say so in your reply, and record de
 
 ## Writing and showing pages
 
-A page that other sessions of the project will update (a dashboard) is a project
-page: read `agent-canvas guide project-pages` before writing it.
+Pin a dashboard with `agent-canvas page pin NAME` (MCP `page`): it shows in
+every session's card; `page unpin NAME` undoes it. If a publish is refused
+because the page changed, read it, merge, publish again.
 
 4. Give named sections an `id`, prefer blocks to hand-written JavaScript, and
-   never load anything from the internet (no CDN, no web fonts). Rewriting the
-   file updates the window in place. If a write into `.agent-canvas/` is
-   refused, tell the owner to add the allow rule `Edit(**/.agent-canvas/**)` to
-   `~/.claude/settings.json`, then retry; do not write the page elsewhere.
+   never load anything from the internet (no CDN, no web fonts). If a write into
+   `.agent-canvas/` is refused, tell the owner to add the allow rule
+   `Edit(**/.agent-canvas/**)` to `~/.claude/settings.json`, then retry; do not
+   write the page elsewhere.
 5. Pass your session id as `session` to every MCP tool. Claude Code: it is in
    the SessionStart context and `AGENT_CANVAS_SESSION` is set for Bash. Others:
    `agent-canvas session start --agent <name>` (MCP: `session_start`) once.
@@ -117,7 +119,7 @@ before you tell the owner the page is ready; `info` items are judgement calls.
 ## Design kit and page templates
 
 `agent-canvas new NAME --template compare|results|run|geometry|cards` (MCP:
-`new_page`) writes `NAME.draft.html`; replace its `(replace)` placeholders;
+`new_page`) writes `NAME.TAG.draft.html`; replace its `(replace)` placeholders;
 `new --list` describes the templates. The kit stylesheet `/static/kit/kit.css`
 and its classes (`.page`, `.cards`, `.panels`, `.badge`, ...) are in
 `agent-canvas guide blocks`.

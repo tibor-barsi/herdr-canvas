@@ -351,6 +351,12 @@ def test_cli_03_show_waits_for_load_and_lists_errors(hub, home) -> None:
         shell.close()
 
 
+def _state(cli, sid: str) -> str:  # noqa: ANN001
+    listed = cli("session", "list", "--all").json["sessions"]
+    (state,) = [s["state"] for s in listed if s["id"] == sid]
+    return state
+
+
 def _ended_session_with_page(cli, shell) -> tuple[str, Path]:  # noqa: ANN001
     """Start a session, see version 1 of its page, end it; return id and folder."""
     sid = cli("session", "start").json["session"]
@@ -359,33 +365,46 @@ def _ended_session_with_page(cli, shell) -> tuple[str, Path]:  # noqa: ANN001
     assert [u["version"] for u in shell.updates(1.5)] == [1]
     assert cli("session", "end", "--session", sid).code == 0
     time.sleep(0.5)
+    assert _state(cli, sid) == "ended"
     return sid, folder
 
 
-def test_ses_08_an_agent_call_on_an_ended_session_watches_it_again(
+# The pool stays watched for the project's other sessions (A-1040), so a page
+# change reaches the window anyway; what an agent call on an ended session must
+# still do is make that session active again (SES-08).
+
+
+def test_ses_08_an_agent_call_on_an_ended_session_makes_it_active_again(
     cli, hub, shell
 ) -> None:
     sid, folder = _ended_session_with_page(cli, shell)
     assert cli("session", "path", "--session", sid).code == 0
+    assert _state(cli, sid) == "active"
     (folder / "page.html").write_text("<p>two</p>")
     assert [u["version"] for u in shell.updates(2.0)] == [2]
 
 
-def test_ses_08_a_show_on_an_ended_session_watches_it_again(cli, hub, shell) -> None:
+def test_ses_08_a_show_on_an_ended_session_makes_it_active_again(
+    cli, hub, shell
+) -> None:
     sid, folder = _ended_session_with_page(cli, shell)
     assert cli("show", "--session", sid).code == 0
+    assert _state(cli, sid) == "active"
     shell.updates(1.0)
     (folder / "page.html").write_text("<p>two</p>")
     assert [u["version"] for u in shell.updates(2.0)] == [2]
 
 
-def test_ses_08_an_ask_on_an_ended_session_watches_it_again(cli, hub, shell) -> None:
+def test_ses_08_an_ask_on_an_ended_session_makes_it_active_again(
+    cli, hub, shell
+) -> None:
     from test_ans_answers import spawn
 
     sid, folder = _ended_session_with_page(cli, shell)
     process = spawn(cli, "ask", "Which?", "--choice", "A", "--session", sid)
     try:
         hub.wait_for_ask(sid)
+        assert _state(cli, sid) == "active"
         (folder / "page.html").write_text("<p>two</p>")
         assert [u["version"] for u in shell.updates(2.0)] == [2]
     finally:
@@ -395,5 +414,7 @@ def test_ses_08_an_ask_on_an_ended_session_watches_it_again(cli, hub, shell) -> 
 def test_cli_14_a_watch_does_not_revive_an_ended_session(cli, hub, shell) -> None:
     sid, folder = _ended_session_with_page(cli, shell)
     cli("watch", "--session", sid, "--timeout", "1")
+    assert _state(cli, sid) == "ended"
+    # The page is the pool's, which stays watched for the project's other sessions.
     (folder / "page.html").write_text("<p>two</p>")
-    assert shell.updates(1.0) == []
+    assert [u["version"] for u in shell.updates(1.5)] == [2]

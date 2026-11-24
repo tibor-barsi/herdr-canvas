@@ -3,10 +3,10 @@
 The owner has to choose the infill for a bracket.
 
 **Draft.** `agent-canvas session path` (MCP: `session_path`) prints
-`{"session": ..., "folder": ...}`, the folder being
-`<project>/.agent-canvas/<session>/`. Write `infill.draft.html` there with your
-own file-writing tool (Claude Code: Write/Edit), not with shell commands such as
-`cat > file` or heredocs. The owner never sees a draft.
+`{"session": ..., "folder": ..., "tag": ...}`, the folder being the project's
+page folder in `<project>/.agent-canvas/`. Write `infill.TAG.draft.html` there
+(your `tag`) with your own file-writing tool (Claude Code: Write/Edit), not with
+shell commands such as `cat > file` or heredocs. The owner never sees a draft.
 
 ```html
 <title>Infill for the bracket</title>
@@ -56,9 +56,8 @@ Act on the answers, todos and changes above, say so in your reply, and record de
    waits as needs you: watch for it, or tell the owner to reply when done.
    `agent-canvas answers [--open]` lists answers; `agent-canvas answers --wait
    [ID...] --timeout N` blocks until each is answered (exit 6 at the timeout).
-   Use the terminal question tool for one quick pick while the owner is at the
-   keyboard, a `canvas-ask` when it needs a picture, there are several
-   questions, or it can wait. The `ask` command is not the `canvas-ask` card: it
+   Use the terminal question tool for one quick pick, a `canvas-ask` when it
+   needs a picture, there are several questions, or it can wait. The `ask` command is not the `canvas-ask` card: it
    puts one question in the window and waits. Do not make answer buttons by
    hand, write a Do `run` without `where`, or put secrets in fields (`secret:
    true` tells the owner to type it); record decisions in the project's
@@ -74,14 +73,15 @@ Act on the answers, todos and changes above, say so in your reply, and record de
 
 ## Writing and showing pages
 
-A page that other sessions of the project will update (a dashboard) is a project
-page: read `agent-canvas guide project-pages` before writing it.
+Pin a dashboard with `agent-canvas page pin NAME` (MCP `page`): it shows in
+every session's card; `page unpin NAME` undoes it. If a publish is refused
+because the page changed, read it, merge, publish again.
 
 4. Give named sections an `id`, prefer blocks to hand-written JavaScript, and
-   never load anything from the internet (no CDN, no web fonts). Rewriting the
-   file updates the window in place. If a write into `.agent-canvas/` is
-   refused, tell the owner to add the allow rule `Edit(**/.agent-canvas/**)` to
-   `~/.claude/settings.json`, then retry; do not write the page elsewhere.
+   never load anything from the internet (no CDN, no web fonts). If a write into
+   `.agent-canvas/` is refused, tell the owner to add the allow rule
+   `Edit(**/.agent-canvas/**)` to `~/.claude/settings.json`, then retry; do not
+   write the page elsewhere.
 5. Pass your session id as `session` to every MCP tool. Claude Code: it is in
    the SessionStart context and `AGENT_CANVAS_SESSION` is set for Bash. Others:
    `agent-canvas session start --agent <name>` (MCP: `session_start`) once.
@@ -102,7 +102,7 @@ before you tell the owner the page is ready; `info` items are judgement calls.
 ## Design kit and page templates
 
 `agent-canvas new NAME --template compare|results|run|geometry|cards` (MCP:
-`new_page`) writes `NAME.draft.html`; replace its `(replace)` placeholders;
+`new_page`) writes `NAME.TAG.draft.html`; replace its `(replace)` placeholders;
 `new --list` describes the templates. The kit stylesheet `/static/kit/kit.css`
 and its classes (`.page`, `.cards`, `.panels`, `.badge`, ...) are in
 `agent-canvas guide blocks`.

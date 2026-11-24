@@ -52,6 +52,11 @@ def run_purge(hub) -> list[str]:  # noqa: ANN001
     return hub.on_loop(lambda: purge_module.purge(services.registry))
 
 
+def at(hub, path: str) -> str:  # noqa: ANN001
+    """A path as purge names it: under the id of session ``a``'s pool."""
+    return f"{hub.app.state.registry.pool_of('a')}/{path}"
+
+
 def versions(folder: Path, stem: str = "one", suffix: str = ".html") -> list[str]:
     pages = folder / "history/pages"
     return sorted(p.name for p in pages.glob(f"{stem}.[0-9][0-9][0-9][0-9]{suffix}"))
@@ -94,7 +99,9 @@ def test_hist_86_a_31_day_old_version_of_a_page_with_newer_versions_is_deleted(
     run_purge(hub)
     assert versions(folder) == ["one.0003.html"]
     log = capsys.readouterr().err
-    assert "agent-canvas: purge: deleted a/history/pages/one.0001.html" in log
+    assert (
+        f"agent-canvas: purge: deleted {at(hub, 'history/pages/one.0001.html')}" in log
+    )
     assert (folder / "one.html").read_text() == PAGE
 
 
@@ -274,7 +281,7 @@ def test_hist_86_runs_in_the_same_pass_as_the_deletion_of_archived_pages(
         headers=hub.key_headers,
     ).raise_for_status()
     shifted(monkeypatch, 31)
-    assert run_purge(hub) == ["a/two.html"]
+    assert run_purge(hub) == [at(hub, "two.html")]
     assert not (folder / "two.html").exists()
     assert versions(folder) == ["one.0003.html"]
 
@@ -356,7 +363,10 @@ def test_hist_86_a_failure_on_one_file_is_logged_and_the_pass_goes_on(
     run_purge(hub)
     assert versions(folder) == ["one.0001.html", "one.0003.html"]
     log = capsys.readouterr().err
-    assert "purge: failed a/history/pages/one.0001.html: PermissionError" in log
+    assert (
+        f"purge: failed {at(hub, 'history/pages/one.0001.html')}: PermissionError"
+        in log
+    )
     assert httpx.get(f"{hub.base_url}/health").status_code == 200
 
 
@@ -383,10 +393,10 @@ def test_hist_86_the_history_list_of_a_pruned_page_lists_only_kept_versions(
     assert changes.json()["count"] == 0
 
 
-def session(hub, session_id: str) -> Path:  # noqa: ANN001
+def session(hub, session_id: str, project: Path | None = None) -> Path:  # noqa: ANN001
     answer = httpx.post(
         f"{hub.base_url}/api/sessions/{session_id}/path",
-        json={"project": str(hub.project_dir), "agent": "t"},
+        json={"project": str(project or hub.project_dir), "agent": "t"},
         headers=hub.key_headers,
     )
     return Path(answer.json()["folder"])
@@ -417,14 +427,19 @@ def test_hist_86_a_broken_comment_file_spares_its_session_and_no_other(
     capsys,  # noqa: ANN001
 ) -> None:
     put(folder / ".comments/one.html.json", "not json")
-    other = session(hub, "b")
+    elsewhere = hub.project_dir.parent / "project-b"  # another pool
+    elsewhere.mkdir()
+    other = session(hub, "b", elsewhere)
     three_versions(other, "two")
     shifted(monkeypatch, 31)
     capsys.readouterr()
     run_purge(hub)
     assert versions(folder) == ["one.0001.html", "one.0002.html", "one.0003.html"]
     assert versions(other, "two") == ["two.0003.html"]
-    assert "purge: failed versions of a: JSONDecodeError" in capsys.readouterr().err
+    pool = hub.pool_of("a")
+    assert (
+        f"purge: failed versions of {pool}: JSONDecodeError" in capsys.readouterr().err
+    )
 
 
 def test_hist_86_each_page_keeps_its_own_newest_version(

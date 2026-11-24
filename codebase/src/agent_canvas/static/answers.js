@@ -28,7 +28,8 @@
   }
 
   /**
-   * Make the relay. ``activeTab()`` gives the shown tab (``id``, ``page``),
+   * Make the relay. ``activeTab()`` gives the shown tab (``id``, ``page``), optional ``poolOf(id)``, the id of the pool a
+   * session's items live in (its own id without one),
    * ``postToFrame(message)`` writes to the frame, ``requestItems(session, page)``
    * asks the hub for a page's items, ``isOldVersion()`` tells whether an earlier
    * version is shown, ``notify(text)`` shows a notice, ``submit(path, body)`` sends
@@ -37,14 +38,14 @@
    * select when the clipboard refused it; ``copyFailed(reason)`` says why a copy failed.
    */
   function createAnswerRelay({
-    activeTab, postToFrame, requestItems, isOldVersion, notify, submit, showCopied, copyFailed,
+    activeTab, poolOf = (id) => id, postToFrame, requestItems, isOldVersion, notify, submit, showCopied, copyFailed,
   }) {
     const items = new Map();
     const folders = new Map();
     let lastCopy = -Infinity;
     let live = false;
     let sentEnded = null;
-    const keyOf = (session, page) => `${session}\n${page}`;
+    const keyOf = (session, page) => `${poolOf(session)}\n${page}`;
 
     function toFrame() {
       const tab = activeTab();
@@ -126,7 +127,7 @@
         items.set(keyOf(message.session, message.page), message.items);
         folders.set(keyOf(message.session, message.page), message.folder);
         const tab = activeTab();
-        if (tab && tab.id === message.session && tab.page === message.page) toFrame();
+        if (tab && poolOf(tab.id) === poolOf(message.session) && tab.page === message.page) toFrame();
       },
       /** The frame starts loading a page: the document in it is not served until it is ready. */
       onLoadBegin() {

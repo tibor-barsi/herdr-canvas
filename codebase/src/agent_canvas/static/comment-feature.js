@@ -124,7 +124,8 @@
 
   /**
    * Make the comment feature. ``main`` is the frame area the box opens over.
-   * ``activeTab()`` gives the shown tab (``id``, ``page``), ``viewing()`` the earlier
+   * ``activeTab()`` gives the shown tab (``id``, ``page``), optional ``poolOf(id)``, the id of the pool a
+   * session's comments live in (its own id without one), ``viewing()`` the earlier
    * version on screen (``{page, version}``) or null, ``isOffline()`` whether the hub is
    * away; ``commentOutbox`` is the shell's outbox (outbox.js). ``postToFrame(message)``
    * writes to the shown frame, ``sendToHub(message)`` to the hub's socket, ``api(method,
@@ -133,7 +134,7 @@
    * updates the tabs after the hub sent a page's comments (``before``: what was known).
    */
   function createCommentFeature({
-    main, activeTab, viewing, isOffline, commentOutbox, postToFrame, sendToHub, api,
+    main, activeTab, poolOf = (id) => id, viewing, isOffline, commentOutbox, postToFrame, sendToHub, api,
     showNotice, drop, updateBar, commentsArrived,
   }) {
     const PICTURE_TIMEOUT_MS = 5000;
@@ -162,7 +163,7 @@
     }
 
     function commentsKey(session, page) {
-      return `${session}\n${page}`;
+      return `${poolOf(session)}\n${page}`;
     }
 
     function shownComments() {
@@ -536,9 +537,10 @@
       let files = 0;
       if (tab) {
         for (const [key, shown] of commentPages) {
-          if (!key.startsWith(`${tab.id}\n`)) continue;
+          if (!key.startsWith(`${poolOf(tab.id)}\n`)) continue;
           const drafts = shown.comments.filter(
-            (c) => c.sent === null || c.replies.some((r) => r.from === null && r.sent === null),
+            (c) => (!c.card || c.card === tab.id)
+              && (c.sent === null || c.replies.some((r) => r.from === null && r.sent === null)),
           ).length;
           comments += drafts;
           if (drafts) files += 1;
@@ -561,7 +563,7 @@
       }
       commentsArrived(message, before);
       const tab = activeTab();
-      if (!tab || tab.id !== message.session || tab.page !== message.page) return;
+      if (!tab || poolOf(tab.id) !== poolOf(message.session) || tab.page !== message.page) return;
       renderCommentPanel();
       sendMarkers();
     }

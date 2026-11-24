@@ -183,6 +183,9 @@ def _delete_page(
             _remove(folder, Path(COMMENTS_DIR) / entry, where)
     _remove(folder, Path(ANSWERS_DIR) / f"{name}.json", where)
     files = [name] + ([draft_name_for(name)] if suffix == ".html" else [])
+    if suffix == ".html":  # every session's tagged draft of a pool page (A-1036)
+        tagged = re.compile(rf"^{re.escape(stem)}\.[0-9a-f]{{8}}\.draft\.html$", re.I)
+        files += [entry for entry in _names(folder) if tagged.match(entry)]
     for file in files:
         if file in referenced:
             _log(f"kept {where}{file} (referenced by {referenced[file]})")

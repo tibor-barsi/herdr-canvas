@@ -31,6 +31,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from agent_canvas.drafts import DRAFT_SUFFIX, session_tag
 from agent_canvas.files_safe import ANSWERS_DIR, COMMENTS_DIR, EVENTS_FILE, write_safely
 
 if TYPE_CHECKING:
@@ -455,13 +456,25 @@ def run_cleanup(
             force=request.force,
             ended=meta["state"] == "ended",
         )
-        result["deleted"] += plan.listed()
-        result["bytes"] += plan.bytes
+        drafts = _own_drafts(registry, meta["id"]) if request.session else []
+        result["deleted"] += plan.listed() + [str(path) for path in drafts]
+        result["bytes"] += plan.bytes + sum(_size(path) for path in drafts)
         result["kept_queued"] += plan.kept_queued
         if request.yes:
             apply_plan(plan)
+            for path in drafts:
+                path.unlink(missing_ok=True)
             _forget(registry, state, events, plan)
     return result
+
+
+def _own_drafts(registry: Any, session_id: str) -> list[Path]:
+    """Return a session's tagged drafts in its pool; nothing else there (A-1005)."""
+    pool = registry.pool_of(session_id)
+    if pool is None:
+        return []
+    folder = registry.folder_of(registry.get(pool).raw)
+    return sorted(folder.glob(f"*.{session_tag(session_id)}{DRAFT_SUFFIX}"))
 
 
 def _scope(registry: Any, request: CleanupRequest) -> list[dict[str, Any]]:
@@ -481,7 +494,7 @@ def _scope(registry: Any, request: CleanupRequest) -> list[dict[str, Any]]:
     if meta is None or request.project not in (None, meta.project):
         raise CleanupError(f"Unknown session {request.session}.", "no-session")
     if is_project_id(meta.id):
-        raise CleanupError("The project pages session is never cleaned.")
+        raise CleanupError("A project's page pool is never cleaned as a session.")
     return [dict(meta.raw)]
 
 

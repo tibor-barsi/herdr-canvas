@@ -8,6 +8,7 @@ import httpx
 import pytest
 
 from agent_canvas.templates import TEMPLATES
+from helpers import own_draft
 
 pytestmark = pytest.mark.integration
 
@@ -27,22 +28,31 @@ def test_kit_03_new_writes_the_page_and_prints_the_path(cli, hub) -> None:  # no
     assert result.code == 0 and result.err == ""
     data = result.json
     path = Path(data["path"])
-    assert path.name == "options.html" and path.parent.name == session
+    assert path.name == "options.html"
+    assert path.parent == Path(
+        cli("session", "path", "--session", session).json["folder"]
+    )
     assert data["template"] == "compare" and data["page"] == "options.html"
     assert data["draft"] is False
     assert 'href="/static/kit/kit.css"' in path.read_text()
     assert cli("show", "options.html", "--session", session).code == 0
 
 
-def test_kit_03_new_refuses_an_existing_file_unless_forced(cli, hub) -> None:  # noqa: ANN001
+def test_kit_03_new_refuses_an_existing_page_even_forced(cli, hub) -> None:  # noqa: ANN001
     session = cli("session", "start").json["session"]
     args = ("new", "p", "--template", "run", "--no-draft", "--session", session)
     path = Path(cli(*args).json["path"])
     path.write_text("edited")
-    refused = cli(*args)
-    assert refused.code == 1 and refused.json["error"] == "failed"
-    assert "already exists" in refused.json["message"] and path.read_text() == "edited"
-    assert cli(*args, "--force").code == 0
+    for extra in ((), ("--force",)):
+        refused = cli(*args, *extra)
+        assert refused.code == 1 and refused.json["error"] == "failed"
+        assert "already exists" in refused.json["message"]
+        assert path.read_text() == "edited"
+    draft = ("new", "p", "--template", "run", "--session", session)
+    path = Path(cli(*draft).json["path"])
+    path.write_text("edited")
+    assert cli(*draft).code == 1 and path.read_text() == "edited"
+    assert cli(*draft, "--force").code == 0
     assert "canvas-progress" in path.read_text()
 
 
@@ -70,12 +80,12 @@ def test_draft_04_new_writes_a_private_draft_by_default(cli, hub) -> None:  # no
     assert result.code == 0, result.err
     data = result.json
     path = Path(data["path"])
-    assert path.name == "options.draft.html" and path.parent.name == session
-    assert data["page"] == "options.draft.html" and data["draft"] is True
+    assert path.name == own_draft(session, "options")
+    assert data["page"] == own_draft(session, "options") and data["draft"] is True
     assert not (path.parent / "options.html").exists()
     assert cli("show", "options.html", "--session", session).code == 1
     explicit = cli("new", "x", "--template", "run", "--draft", "--session", session)
-    assert explicit.json["page"] == "x.draft.html"
+    assert explicit.json["page"] == own_draft(session, "x")
 
 
 def test_draft_04_the_draft_and_the_page_are_refused_and_forced_separately(

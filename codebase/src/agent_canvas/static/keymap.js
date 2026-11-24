@@ -29,6 +29,7 @@ const keyMap = (function () {
   add("pane.prev", "window", NAV, "previous card of the tab");
   add("page.next", "window", NAV, "next page tab of the card");
   add("page.prev", "window", NAV, "previous page tab of the card");
+  add("page.pin", "window", NAV, "pin / unpin the page of the card (pinned pages come first in every card of the project)");
   add("sidebar.toggle", "window", "Window", "sidebar: fold / open");
   add("help.open", "window", "Window", "this overview");
   add("send.now", "window", "Window", "send to the agent");

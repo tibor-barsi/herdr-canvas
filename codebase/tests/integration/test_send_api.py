@@ -83,10 +83,19 @@ def test_draw_05_send_event_is_in_the_log_and_pending(hub) -> None:
         json={"project": str(hub.project_dir), "agent": "t"},
     )
     assert registered.status_code == 200, registered.text
-    session = hub.state.session_of("a")
+    pool = hub.state.session_of(hub.pool_of("a"))  # a card's send is in its pool's log
+    (pool.folder / "page.html").write_text("<p>x</p>")
+    shown = httpx.post(  # a session not listening gets the sends on pages it touched
+        f"{hub.base_url}/api/sessions/a/show",
+        headers=hub.key_headers,
+        json={"name": "page.html", "audit": False},
+        timeout=30,
+    )
+    assert shown.status_code == 200, shown.text
     event = post_send(hub, "a", body()).json()["event"]
-    lines = (session.folder / "events.jsonl").read_text().splitlines()
-    assert json.loads(lines[0])["id"] == event["id"]
+    lines = (pool.folder / "events.jsonl").read_text().splitlines()
+    logged = json.loads(lines[0])
+    assert (logged["id"], logged["for"]) == (event["id"], "a")
     answer = httpx.post(
         f"{hub.base_url}/api/sessions/a/pending",
         headers=hub.key_headers,

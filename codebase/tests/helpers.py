@@ -4,12 +4,19 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from agent_canvas.drafts import draft_name_for, session_tag
+
 CODEBASE_DIR = Path(__file__).resolve().parents[1]
 REPO_DIR = CODEBASE_DIR.parent
 PLUGIN_DIR = REPO_DIR / "plugin"
 PACKAGE_DIR = CODEBASE_DIR / "src" / "agent_canvas"
 VENDOR_DIR = PACKAGE_DIR / "static" / "vendor"
 FIXTURE_DIR = CODEBASE_DIR / "tests" / "browser" / "fixtures"
+
+
+def own_draft(session_id: str, name: str = "page") -> str:
+    """Return the file name of the session's own draft of ``name`` (POOL-11)."""
+    return draft_name_for(name, session_tag(session_id))
 
 
 def raw_get(port: int, path: str, host: str | None = None, method: str = "GET"):

@@ -70,8 +70,9 @@ HERDR_ROUTES = {
     ("/api/herdr/focus", "POST"),
 }
 
+POOL_ROUTES = {("/api/pages/migrate", "POST")}  # POOL-09, A-1123
+
 REVISION_12_ROUTES = {  # P21.2: the comments route group
-    ("/api/sessions/{id}/project-page", "POST"),  # PROJ-02
     ("/api/sessions/{id}/comments", "GET"),
     ("/api/sessions/{id}/comments", "HEAD"),
     ("/api/sessions/{id}/comments", "POST"),
@@ -171,5 +172,5 @@ def test_arc_01_the_urls_and_methods_of_revision_10_are_kept(
     """No (path, method) pair is lost; later revisions add only their own."""
     app = make_app(tmp_path, monkeypatch)
     expected = REVISION_10_ROUTES | REVISION_11_ROUTES | REVISION_12_ROUTES
-    expected |= KEYS_ROUTES | HERDR_ROUTES
+    expected |= KEYS_ROUTES | HERDR_ROUTES | POOL_ROUTES
     assert route_pairs(app) == expected

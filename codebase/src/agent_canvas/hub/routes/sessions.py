@@ -13,6 +13,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, PlainTextResponse, Response
 from starlette.routing import BaseRoute
 
+from agent_canvas.drafts import session_tag
 from agent_canvas.hub import changes, comments
 from agent_canvas.hub.cleanup import CleanupError, CleanupRequest, run_cleanup
 from agent_canvas.hub.events import new_event_id
@@ -21,10 +22,9 @@ from agent_canvas.hub.looks import LookError, LookRequest, LookService
 from agent_canvas.hub.registry import (
     RegistryError,
     _page_title,
-    git_top_folder,
     is_project_id,
     now_iso,
-    project_session_id,
+    pool_key,
     validate_or_raise,
 )
 from agent_canvas.hub.routes.helper import (
@@ -81,7 +81,6 @@ def routes(services: Services) -> list[BaseRoute]:
             session_reserve,
             Declaration(reason="a reserved id shows no tab until a command uses it"),
         ),
-        change(base + "/{id}/project-page", project_page, tabs),
         change(base + "/{id}/show", session_show, tabs),
         change(base + "/{id}/title", session_title, tabs),
         change(base + "/{id}/end", session_end, tabs),
@@ -129,10 +128,24 @@ def summary(svc: Services, meta: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def folder_result(svc: Services, meta: dict[str, Any]) -> Response:
-    """Answer with a session's id and folder."""
+def folder_result(
+    svc: Services, publish: Publish, meta: dict[str, Any], published: bool
+) -> Response:
+    """
+    Answer with a session's id, its pool folder and draft tag (POOL-01, POOL-11).
+
+    A pool made here sends ``tabs`` unless the caller ``published`` it already.
+    """
+    new = svc.registry.pool_of(meta["id"]) is None
+    try:
+        pool = svc.registry.pool_session(pool_key(meta["project"]))
+    except RegistryError as error:
+        return failure(error)
+    if new and not published:
+        publish("tabs")
+    folder = str(svc.registry.folder_of(pool))
     return JSONResponse(
-        {"session": meta["id"], "folder": str(svc.registry.folder_of(meta))}
+        {"session": meta["id"], "folder": folder, "tag": session_tag(meta["id"])}
     )
 
 
@@ -144,11 +157,29 @@ def known_session(svc: Services, request: Request) -> Any:
         return None
 
 
+def page_session(svc: Services, session_id: str) -> Any:
+    """
+    Return the registered session that holds a card's pages, or None.
+
+    A session of a project with a pool resolves to the pool; any other one
+    (and a pool itself) to itself (POOL-01).
+    """
+    try:
+        return svc.state.session_of(svc.registry.pool_of(session_id) or session_id)
+    except KeyError:
+        return None
+
+
+def card_of(session: Any, session_id: str) -> str | None:
+    """Return the card a page request comes from when its pages are a pool's."""
+    return session_id if is_project_id(session.session_id) else None
+
+
 async def list_sessions(request: Request, svc: Services) -> Response:
-    """List sessions (GET)."""
+    """List sessions (GET); a project's pool is not one (A-1146)."""
     params = request.query_params
     metas = svc.registry.list(params.get("all") == "1", params.get("project"))
-    return JSONResponse([summary(svc, m) for m in metas])
+    return JSONResponse([summary(svc, m) for m in metas if not is_project_id(m["id"])])
 
 
 async def start_session(request: Request, svc: Services, publish: Publish) -> Response:
@@ -163,7 +194,7 @@ async def start_session(request: Request, svc: Services, publish: Publish) -> Re
     except RegistryError as error:
         return failure(error)
     publish("tabs")
-    return folder_result(svc, meta)
+    return folder_result(svc, publish, meta, published=True)
 
 
 async def get_session(request: Request, svc: Services) -> Response:
@@ -191,7 +222,7 @@ async def session_path(request: Request, svc: Services, publish: Publish) -> Res
     if created:
         publish("tabs")
     resumed(svc, publish, request.path_params["id"])
-    return folder_result(svc, meta)
+    return folder_result(svc, publish, meta, published=created)
 
 
 async def session_reserve(
@@ -211,7 +242,7 @@ async def session_reserve(
 
 
 async def session_show(request: Request, svc: Services, publish: Publish) -> Response:
-    """Show a page in a session."""
+    """Show a page of the session's pool (POOL-01, POOL-06)."""
     state, registry, watcher = svc.state, svc.registry, svc.watcher
     body = await body_of(request)
     session_id = request.path_params["id"]
@@ -219,7 +250,6 @@ async def session_show(request: Request, svc: Services, publish: Publish) -> Res
     if kind is not None and kind not in KINDS:
         return failure(RegistryError("usage", f"Unknown kind {kind!r}."))
     try:
-        who = _project_updater(svc, session_id, body.get("by"))
         _, created = registry.ensure(
             session_id,
             str(body.get("project", "")),
@@ -228,33 +258,32 @@ async def session_show(request: Request, svc: Services, publish: Publish) -> Res
         if created:
             publish("tabs")
         resumed(svc, publish, session_id)
-        _, page, path = registry.show(
+        pool_meta, page, path = registry.show(
             session_id,
             body.get("name"),
             body.get("title"),
             body.get("copy"),
             publish=body.get("publish") is True,
         )
-        chosen = registry.set_kind(session_id, page, kind) if kind else None
-        if who:
-            registry.note_updater(session_id, page, who)
+        pool = pool_meta["id"]
+        chosen = registry.set_kind(pool, page, kind) if kind else None
     except RegistryError as error:
         return failure(error)
     watcher.refresh()  # a hidden session is watched again once shown
     # show_page only scheduled the broadcast, so the shell cannot have
     # reported yet: stale reports are dropped before it does.
-    state.reset_page_status(session_id, page)
-    session = state.session_of(session_id)
+    state.reset_page_status(pool, page)
+    session = state.session_of(pool)
     # A published draft replaces a page that may be on screen: push it, so the
     # open frame is morphed in place (blocks keep their state) and not left stale.
     version = await watcher.ingest(
         session, page, push=body.get("publish") is True, notify=False
     )
-    svc.answers.page_changed(session_id, page)  # a new version may reopen an item
+    svc.answers.page_changed(pool, page)  # a new version may reopen an item
     window = await svc.launcher.ensure()
     if window == "launched":
         state.open_on_connect = (session_id, page)
-    rendered = await _rendered(state, svc.launcher, session_id, page)
+    rendered = await _rendered(state, svc.launcher, pool, page)
     audit = None
     extra: dict[str, Any] = {}
     if viewer_type(page):
@@ -271,11 +300,11 @@ async def session_show(request: Request, svc: Services, publish: Publish) -> Res
             "session": session_id,
             "page": page,
             "path": str(path),
-            "url": state.frame_url(session_id, page),
+            "url": state.frame_url(pool, page),
             "version": version,
             "window": window,
             "rendered": rendered,
-            "errors": state.page_status(session_id, page).errors,
+            "errors": state.page_status(pool, page).errors,
             "audit": audit,
             "next": _next_step(page, path, body.get("title")),
             **({"kind": chosen["kind"], "set_by": chosen["set_by"]} if chosen else {}),
@@ -285,52 +314,20 @@ async def session_show(request: Request, svc: Services, publish: Publish) -> Res
     )
 
 
-async def project_page(request: Request, svc: Services, publish: Publish) -> Response:
-    """Create the caller's project pages session if needed; return its id and folder."""
-    caller = request.path_params["id"]
-    project = svc.registry.project_of(caller)
-    if project is None or is_project_id(caller):
-        return failure(RegistryError("no-session", "Unknown session."))
-    try:
-        meta = svc.registry.project_session(git_top_folder(project))
-    except RegistryError as error:
-        return failure(error)
-    publish("tabs")
-    return folder_result(svc, meta)
-
-
-def _project_updater(
-    svc: Services, session_id: str, by: object
-) -> dict[str, Any] | None:
-    """
-    Return who shows on project pages ``session_id``; None for other sessions.
-
-    Raises
-    ------
-    RegistryError
-        If ``by`` is not a known session of this project (PROJ-04).
-    """
-    if not is_project_id(session_id):
-        return None
-    registry = svc.registry
-    project = registry.project_of(by) if isinstance(by, str) else None
-    if project is None or is_project_id(by):
-        raise RegistryError("no-session", "A project page needs the calling session.")
-    if project_session_id(git_top_folder(project)) != session_id:
-        raise RegistryError("failed", "The caller belongs to another project.")
-    return registry.updater(by)
-
-
 async def session_look(request: Request, svc: Services, publish: Publish) -> Response:
     """Render a page or draft and store the picture (LOOK-01, LOOK-07)."""
-    session = known_session(svc, request)
+    card = request.path_params["id"]
+    session = page_session(svc, card)
     if session is None:
         return failure(RegistryError("no-session", "Unknown session."))
+    pooled = card_of(session, card)
     try:
         wanted = LookRequest.from_body(await body_of(request))
-        meta = svc.registry.get(session.session_id)
-        active = meta.active_page if meta else None
-        result = await svc.looks.look(session, wanted, active)
+        meta = svc.registry.get(card)
+        tab = svc.registry.tab_of(meta.raw) if meta else {}
+        active = tab.get("active_page")
+        tag = session_tag(card) if pooled else None
+        result = await svc.looks.look(session, wanted, active, tag)
     except LookError as error:
         status = 404 if error.code == "no-session" else 422
         body = {"error": error.code, "message": str(error)}
@@ -401,11 +398,8 @@ async def session_unhide(request: Request, svc: Services, publish: Publish) -> R
 
 
 async def session_versions(request: Request, svc: Services) -> Response:
-    """List the versions of a page."""
-    try:
-        session = svc.state.session_of(request.path_params["id"])
-    except KeyError:
-        session = None
+    """List the versions of a page; a card's pages are its pool's (POOL-01)."""
+    session = page_session(svc, request.path_params["id"])
     page = request.query_params.get("page", "")
     if session is None or "/" in page or not (is_page_name(page) or viewer_type(page)):
         return failure(RegistryError("no-session", "Unknown session or page."))
@@ -420,9 +414,9 @@ async def session_changes(request: Request, svc: Services) -> Response:
 
     ``since`` names the version to compare from; without it the recorded
     ``seen_version`` is used, and a page never seen has no changes. Reading
-    this never counts as seeing (NEW-01).
+    this never counts as seeing (NEW-01). A card's pages are its pool's.
     """
-    session = known_session(svc, request)
+    session = page_session(svc, request.path_params["id"])
     page = request.query_params.get("page", "")
     if session is None or "/" in page or not (is_page_name(page) or viewer_type(page)):
         return failure(RegistryError("no-session", "Unknown session or page."))
@@ -455,9 +449,15 @@ async def session_changes(request: Request, svc: Services) -> Response:
 
 
 async def session_send(request: Request, svc: Services, publish: Publish) -> Response:
-    """Store an uploaded send and create its events, one per page (COM-10, COM-11)."""
-    session = known_session(svc, request)
-    if session is None:
+    """
+    Store an uploaded send and create its events, one per page (COM-10, COM-11).
+
+    A send about a pool page takes only the card's comments, and its events go
+    to the pool's log with ``for`` naming the card (POOL-05); a send without a
+    page stays the session's own (A-1019).
+    """
+    own = known_session(svc, request)
+    if own is None:
         return failure(RegistryError("no-session", "Unknown session."))
     raw = await _read_limited(request, MAX_SEND_BYTES)
     if raw is None:
@@ -466,6 +466,8 @@ async def session_send(request: Request, svc: Services, publish: Publish) -> Res
         clean = clean_send(json.loads(raw))
     except ValueError as error:  # SendError is a ValueError; so is bad JSON
         return _send_refused(str(error) or "Body is not JSON.", 400)
+    session = page_session(svc, own.session_id) if clean["page"] else own
+    card = card_of(session, own.session_id)
     folder, page, delivery = session.folder, clean["page"], clean["delivery"]
     if clean["marks"]:
         logger.warning(
@@ -478,7 +480,9 @@ async def session_send(request: Request, svc: Services, publish: Publish) -> Res
     event_ids = {name: new_event_id() for name in names}
     sent_at = now_iso()  # also the events' time: a reply's `sent` equals it (5.3)
     taken = {
-        name: comments.take_unsent(folder, name, delivery, event_ids[name], sent_at)
+        name: comments.take_unsent(
+            folder, name, delivery, event_ids[name], sent_at, card
+        )
         if name
         else []
         for name in names
@@ -499,7 +503,7 @@ async def session_send(request: Request, svc: Services, publish: Publish) -> Res
             part["comments"] = comments_for_send(folder, taken[name], number)
             latest = PageHistory(folder).latest(name) if name else None
             record = store_send(
-                folder, session.session_id, event_ids[name],
+                folder, card or session.session_id, event_ids[name],
                 latest[0] if latest else None, part, send_id, [k, len(parts)],
             )  # fmt: skip
             stored.append((name, number, record))
@@ -514,7 +518,8 @@ async def session_send(request: Request, svc: Services, publish: Publish) -> Res
     finally:
         for name in names:
             if name and taken[name]:
-                changed(svc, publish, session.session_id, name)
+                changed(svc, publish, own.session_id, name)
+    pooled = {"for": card} if card else {}
     events = [
         svc.events.create(
             session.session_id,
@@ -523,7 +528,7 @@ async def session_send(request: Request, svc: Services, publish: Publish) -> Res
             delivery=delivery,
             page=name,
             page_version=record["page_version"],
-            fields={**event_fields(folder, record, number), "time": sent_at},
+            fields={**event_fields(folder, record, number), "time": sent_at, **pooled},
         )
         for name, number, record in stored
     ]
@@ -531,22 +536,43 @@ async def session_send(request: Request, svc: Services, publish: Publish) -> Res
 
 
 async def session_sends(request: Request, svc: Services) -> Response:
-    """List the sends of a session."""
+    """List the sends of a session: its own and its card's in the pool (A-1035)."""
     session = known_session(svc, request)
     if session is None:
         return failure(RegistryError("no-session", "Unknown session."))
-    return JSONResponse({"sends": list_sends(session.folder)})
+    return JSONResponse({"sends": _card_sends(svc, session)})
+
+
+def _card_sends(svc: Services, session: Any) -> list[dict[str, Any]]:
+    """Return a session's own sends, then its card's sends in its pool."""
+    own = list_sends(session.folder)
+    holder = page_session(svc, session.session_id)
+    if holder is None or holder.session_id == session.session_id:
+        return own
+    card = session.session_id
+    return own + [s for s in list_sends(holder.folder) if s.get("session") == card]
 
 
 async def send_screenshot(request: Request, svc: Services) -> Response:
-    """Return the screenshot of a send, or with ``.c<n>`` its comment's picture."""
+    """
+    Return the screenshot of a send, or with ``.c<n>`` its comment's picture.
+
+    A pool member's number names its card's send in the pool when there is one,
+    else its own send (A-1035).
+    """
     session = known_session(svc, request)
     match = SEND_PNG.match(request.path_params["name"])
-    data = (
-        read_screenshot(session.folder, int(match[1]), match[2])
-        if session and match
-        else None
-    )
+    data = None
+    if session and match:
+        number = int(match[1])
+        holder = page_session(svc, session.session_id)
+        pooled = holder is not None and holder.session_id != session.session_id
+        mine = pooled and any(
+            s["number"] == number and s.get("session") == session.session_id
+            for s in list_sends(holder.folder)
+        )
+        folder = holder.folder if mine else session.folder
+        data = read_screenshot(folder, number, match[2])
     if data is None:
         return PlainTextResponse("not found", status_code=404)
     return Response(data, media_type="image/png", headers={"Cache-Control": "no-store"})
@@ -580,10 +606,10 @@ async def session_pending(
         meta = registry.get(session_id)
     except RegistryError as error:
         return failure(error)
-    if is_project_id(session_id):  # its events go to sessions of the project (PROJ-07)
+    if is_project_id(session_id):  # a pool's events go to its sessions (POOL-05)
         return failure(
             RegistryError(
-                "no-session", f"{session_id} is reserved for the project pages."
+                "no-session", f"{session_id} is a project's page pool, not a session."
             )
         )
     if meta is None and not registry.is_reserved(session_id):
@@ -597,7 +623,13 @@ async def session_pending(
         return JSONResponse({"session": session_id, "events": taken, "reminders": []})
     summary = Waiting(
         feedback=svc.events.pending(meta.id, peek=peek, via=via),
-        reminders=registry.reminders(meta.id, stamp=not peek),
+        reminders=registry.reminders(
+            meta.id,
+            stamp=not peek,
+            alive=lambda writer: (
+                svc.events.listening(writer) or svc.herdr_app.alive(writer)
+            ),
+        ),
         boxes=svc.answers.open_boxes(meta.id),
     )
     told = for_agent(summary)

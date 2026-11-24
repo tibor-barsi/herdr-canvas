@@ -38,6 +38,11 @@ After pulling a newer version (#57):
    the installed command is harmless: its hook lines exit 0 on an unknown hook
    name, but the canvas hooks do nothing until the tool is reinstalled.
 
+The first start of a version with pooled pages (#2) moves the pages of the old
+session folders into each project's pool once, with their comments, answers and
+versions; the old folders stay as they are. `agent-canvas pages migrate --project
+DIR` shows what it would move, and `--yes` runs it again by hand.
+
 If you reinstalled first, the new command refuses the old hub ("did not prove
 that it holds the access key"), also for `stop`. Find the old hub with
 `pgrep -af 'agent_canvas.cli hub'` and end that process by id (or
@@ -237,15 +242,16 @@ agent-canvas cleanup --older-than 30d --yes    # delete
 agent-canvas cleanup --session <id> --yes      # one session
 ```
 
-Pages are never removed by `--older-than`. `--session` removes the session
-folder (pages included) only when the session has ended. Feedback that has not
+Pages are never removed by `--older-than`. `--session` removes the session's
+own folder and its drafts only when the session has ended; the project's pages
+in the pool stay. Feedback that has not
 yet reached an agent is kept unless you add `--force`; such events are listed
 as `kept_queued`. `--project DIR` limits the scope.
 
 ### Pictures of pages (`agent-canvas look`)
 
 Agents render their own page with `agent-canvas look` before they publish it.
-The pictures are `history/looks/NNNN.png` in the session folder; `cleanup`
+The pictures are `history/looks/NNNN.png` in the project's pool folder; `cleanup`
 removes them like sends. The open canvas window renders them (hidden, with your
 fonts and colour scheme); nothing shows on screen and your tab, scroll and
 draft are untouched. Without a window, or for the other colour scheme, the hub

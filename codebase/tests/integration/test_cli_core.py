@@ -26,6 +26,12 @@ def folder_of(project: Path, session: str) -> Path:
     return (project / ".agent-canvas" / session).resolve()
 
 
+def pool_folder_of(base: Path) -> Path:
+    """Return the pool folder under a project's canvas folder (POOL-01)."""
+    (found,) = base.glob("pool-*")
+    return found.resolve()
+
+
 def page_token(cli, session: str) -> str:
     state_dir = Path(cli.environment["AGENT_CANVAS_STATE_DIR"])
     registry = json.loads((state_dir / "sessions.json").read_text())
@@ -43,11 +49,11 @@ def test_ses_04_session_start_prints_uuid4_and_folder(cli) -> None:
     result = cli("session", "start", "--title", "Bracket")
     assert result.code == 0 and result.err == ""
     data = result.json
-    assert set(data) == {"session", "folder"}
+    assert set(data) == {"session", "folder", "tag"}  # POOL-01, POOL-11
     assert uuid.UUID(data["session"]).version == 4
-    assert Path(data["folder"]) == folder_of(cli.cwd, data["session"])
+    assert Path(data["folder"]) == pool_folder_of(cli.cwd / ".agent-canvas")
     assert Path(data["folder"]).is_dir()
-    meta = read_meta(data["folder"])
+    meta = read_meta(folder_of(cli.cwd, data["session"]))
     assert (meta["title"], meta["agent"]) == ("Bracket", "agent")
 
 
@@ -55,7 +61,9 @@ def test_ses_04_session_start_agent_option_and_environment(cli) -> None:
     a = cli("session", "start", "--agent", "opencode")
     b = cli("session", "start", extra_env={"AGENT_CANVAS_AGENT": "claude-code"})
     c = cli("session", "start", "--agent", "x", extra_env={"AGENT_CANVAS_AGENT": "y"})
-    agents = [read_meta(r.json["folder"])["agent"] for r in (a, b, c)]
+    agents = [
+        read_meta(folder_of(cli.cwd, r.json["session"]))["agent"] for r in (a, b, c)
+    ]
     assert agents == ["opencode", "claude-code", "x"]
 
 
@@ -117,7 +125,8 @@ def test_ses_03_project_defaults_to_cwd_without_git(cli) -> None:
     sub = cli.cwd / "deep" / "er"
     sub.mkdir(parents=True)
     data = cli("session", "path", "--session", "a", cwd=sub).json
-    assert Path(data["folder"]) == folder_of(sub, "a")
+    assert Path(data["folder"]) == pool_folder_of(sub / ".agent-canvas")
+    assert folder_of(sub, "a").is_dir()
 
 
 def test_ses_03_project_is_git_toplevel_when_in_a_repo(cli) -> None:
@@ -125,7 +134,8 @@ def test_ses_03_project_is_git_toplevel_when_in_a_repo(cli) -> None:
     sub = cli.cwd / "src"
     sub.mkdir()
     data = cli("session", "path", "--session", "a", cwd=sub).json
-    assert Path(data["folder"]) == folder_of(cli.cwd, "a")
+    assert Path(data["folder"]) == pool_folder_of(cli.cwd / ".agent-canvas")
+    assert folder_of(cli.cwd, "a").is_dir()
 
 
 def test_ses_03_environment_project_beats_git_and_option_beats_environment(
@@ -142,14 +152,14 @@ def test_ses_03_environment_project_beats_git_and_option_beats_environment(
         "session", "path", "--session", "b", "--project", str(opt_project),
         extra_env=env,
     )  # fmt: skip
-    assert Path(a["folder"]) == folder_of(env_project, "a")
-    assert Path(b.json["folder"]) == folder_of(opt_project, "b")
+    assert Path(a["folder"]) == pool_folder_of(env_project / ".agent-canvas")
+    assert Path(b.json["folder"]) == pool_folder_of(opt_project / ".agent-canvas")
 
 
 def test_ses_03_relative_project_option_is_resolved_against_cwd(cli) -> None:
     (cli.cwd / "rel").mkdir()
     data = cli("session", "path", "--session", "a", "--project", "rel").json
-    assert Path(data["folder"]) == folder_of(cli.cwd / "rel", "a")
+    assert Path(data["folder"]) == pool_folder_of(cli.cwd / "rel" / ".agent-canvas")
 
 
 def test_ses_03_home_itself_is_refused_with_exit_1(cli, home: Path) -> None:
@@ -209,7 +219,9 @@ def test_cli_session_list_project_filter(cli, home: Path) -> None:
     cli("session", "start")
     b = cli("session", "start", "--project", str(other)).json["session"]
     listed = cli("session", "list", "--project", str(other)).json["sessions"]
-    assert [s["id"] for s in listed] == [b]
+    assert [s["id"] for s in listed] == [b]  # its pool is not listed (A-1146)
+    everything = cli("session", "list", "--all").json["sessions"]
+    assert [s["agent"] for s in everything] == ["agent", "agent"]
 
 
 def test_cli_session_list_empty(cli) -> None:
@@ -230,7 +242,11 @@ def test_cli_02_show_returns_5_7_shape(cli) -> None:
     folder = Path(cli("session", "path", "--session", "a").json["folder"])
     (folder / "page.html").write_text("<p>x</p>")
     data = cli("show", "--session", "a", "--title", "My page").json
-    token = page_token(cli, "a")
+    pools = json.loads(
+        (Path(cli.environment["AGENT_CANVAS_STATE_DIR"]) / "sessions.json").read_text()
+    )
+    (pool_id,) = [s for s, entry in pools.items() if "folder" in entry]
+    token = page_token(cli, pool_id)  # the page's address is the pool's (POOL-03)
     port = cli.environment["AGENT_CANVAS_PORT"]
     assert data == {
         "session": "a",
@@ -246,11 +262,8 @@ def test_cli_02_show_returns_5_7_shape(cli) -> None:
     }
     assert data["window"] == "disabled"
     meta = read_meta(folder)
-    assert (meta["pages"], meta["active_page"], meta["title"]) == (
-        ["page.html"],
-        "page.html",
-        "My page",
-    )
+    assert (meta["pages"], meta["active_page"]) == (["page.html"], "page.html")
+    assert read_meta(folder_of(cli.cwd, "a"))["title"] == "My page"
 
 
 def test_cli_02_show_named_page_and_absolute_path_inside_folder(cli) -> None:
@@ -315,7 +328,7 @@ def test_hub_07_show_in_git_repo_lists_nothing_under_canvas(cli) -> None:
 def test_hub_07_configured_folder_and_gitignore(cli) -> None:
     git("init", "-q", cwd=cli.cwd)
     folder = Path(cli("session", "path", "--session", "a").json["folder"])
-    assert folder == (cli.cwd / "tools" / "canvas" / "a").resolve()
+    assert folder == pool_folder_of(cli.cwd / "tools" / "canvas")
     (folder / "page.html").write_text("<p>x</p>")
     assert cli("show", "--session", "a").code == 0
     assert git("status", "--porcelain", cwd=cli.cwd).strip() == ""
@@ -358,7 +371,7 @@ def test_cli_status_reports_hub_and_session_count(cli, hub) -> None:
         "version": data["version"],
         "port": hub.port,
         "window_connected": False,
-        "sessions": 1,
+        "sessions": 1,  # a pool is not a session (A-1146)
     }
 
 
@@ -367,10 +380,11 @@ def test_hub_04_restart_keeps_registry(cli, hub) -> None:
     from agent_canvas.hub.app import create_app
 
     sid = cli("session", "start").json["session"]
-    token = hub.state.sessions()[0].page_token
+    kept = {(s.session_id, s.page_token) for s in hub.state.sessions()}
+    assert len(kept) == 2 and sid in {s for s, _ in kept}  # with its pool, A-1022
     second = create_app(Config(port=hub.port), hub.state_dir)
     sessions = second.state.hub.sessions()
-    assert [(s.session_id, s.page_token) for s in sessions] == [(sid, token)]
+    assert {(s.session_id, s.page_token) for s in sessions} == kept
 
 
 # ---- CLI-12 -------------------------------------------------------------------

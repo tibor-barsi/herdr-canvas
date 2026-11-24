@@ -364,8 +364,7 @@ def _event_text(number: int, event: dict[str, Any]) -> list[str]:
     if event.get("target"):
         head += f" on {_target_text(event['target'])}"
     if event.get("page"):
-        word = "project page" if event.get("project_page") else "page"
-        head += f" ({word} {event['page']}, version {event.get('page_version')})"
+        head += f" (page {event['page']}, version {event.get('page_version')})"
     if kind != "send":
         return [f"{head}: {json.dumps(event.get('value'))}"]
     lines = [f"{head}: {json.dumps(event.get('message', ''), ensure_ascii=False)}"]
@@ -378,9 +377,8 @@ def _event_text(number: int, event: dict[str, Any]) -> list[str]:
     for comment in comments:
         lines.extend(_comment_lines(comment, event.get("time")))
     if comments:
-        flag = " --project-page" if event.get("project_page") else ""
         lines.append(
-            f"Answer each: agent-canvas comment reply{flag} {event.get('page')} "
+            f"Answer each: agent-canvas comment reply {event.get('page')} "
             'N "text" [--done]'
         )
     return lines
@@ -389,10 +387,7 @@ def _event_text(number: int, event: dict[str, Any]) -> list[str]:
 def _item_line(event: dict[str, Any]) -> str:
     """One line for the answer to a card (ANS-06)."""
     value = event.get("value") or {}
-    page = (
-        f"project page {event['page']}" if event.get("project_page") else event["page"]
-    )
-    head = f"{event['kind']} {event['target']['canvas_id']} ({page}): "
+    head = f"{event['kind']} {event['target']['canvas_id']} ({event['page']}): "
     if event["kind"] == "change":
         return head + _one_line(value.get("reason"))
     if event["kind"] == "todo":

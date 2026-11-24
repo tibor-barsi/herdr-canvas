@@ -62,8 +62,7 @@ def test_arc_02_every_state_changing_route_carries_a_declaration(hub_app) -> Non
         declaration = route.endpoint.declaration
         assert declaration.views or declaration.reason.strip(), route.path
         assert all(
-            view in ("tabs", "comments", "answers")
-            for view in declaration.views
+            view in ("tabs", "comments", "answers") for view in declaration.views
         )
 
 
@@ -91,9 +90,12 @@ def step_plan(app, tmp_path: Path, client: TestClient, calls: list[str]):  # noq
     def post(path: str, body: dict | None = None):  # noqa: ANN202
         return lambda: client.post(path, json=base if body is None else body)
 
+    def pool_of(session_id: str) -> str:
+        """The pool that holds the session's pages (POOL-01)."""
+        return app.state.services.registry.pool_of(session_id)
+
     yield "start_session", post("/api/sessions")
     yield "session_path", post("/api/sessions/a/path")
-    yield "project_page", post("/api/sessions/a/project-page", {})
     yield "session_reserve", post("/api/sessions/r/reserve")
     yield (
         "session_show",
@@ -142,7 +144,7 @@ def step_plan(app, tmp_path: Path, client: TestClient, calls: list[str]):  # noq
         owner_call = as_owner(path, body)
 
         def call():  # noqa: ANN202
-            folder = app.state.hub.session_of("b").folder
+            folder = app.state.hub.session_of(pool_of("b")).folder
             PageHistory(folder).save("cards.html", cards.encode())
             return owner_call()
 
@@ -187,7 +189,7 @@ def step_plan(app, tmp_path: Path, client: TestClient, calls: list[str]):  # noq
     yield "upload_file", upload
 
     def open_file():  # noqa: ANN202
-        (Path(app.state.hub.session_of("b").folder) / "o.md").write_text("# o")
+        (Path(app.state.hub.session_of(pool_of("b")).folder) / "o.md").write_text("# o")
         token = app.state.hub.new_login_token()
         client.get(f"/login?t={token}", follow_redirects=False)
         return client.post(
@@ -206,6 +208,8 @@ def step_plan(app, tmp_path: Path, client: TestClient, calls: list[str]):  # noq
     page_body = {"session": "b", "page": "page.html", "kind": "long-term"}
     yield "set_page", as_owner("/api/home/pages", page_body)
     yield "session_pending", post("/api/sessions/a/pending", {"peek": True})
+    migrate = {"project": str(project), "yes": True}  # POOL-09, A-1123
+    yield "migrate_pages", post("/api/pages/migrate", migrate)
     yield "session_end", post("/api/sessions/b/end")
     yield "cleanup", post("/api/cleanup", {"session": "b", "yes": True, "force": True})
     yield "open_window", post("/api/open", {"print_url": True})

@@ -82,7 +82,7 @@ def test_arc_04_the_window_gets_the_recorded_messages_in_the_recorded_order(
         assert cli("session", "path", "--session", "b").code == 0
         rec.settle("session b")
 
-        folder = hub.state.session_of("a").folder
+        folder = hub.state.session_of(hub.pool_of("a")).folder  # the pages' folder
         (folder / "page.html").write_text("<p>one</p>")
         rec.settle("write page")
         assert cli("show", "page.html", "--session", "a", "--no-audit").code == 0

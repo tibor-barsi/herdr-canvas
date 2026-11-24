@@ -514,7 +514,11 @@ class LookService:
     # ---- the look ------------------------------------------------------------
 
     async def look(
-        self, session: Session, request: LookRequest, active_page: str | None
+        self,
+        session: Session,
+        request: LookRequest,
+        active_page: str | None,
+        tag: str | None = None,
     ) -> dict[str, Any]:
         """
         Render a page or draft of ``session`` and store the picture.
@@ -527,6 +531,8 @@ class LookService:
             What to render.
         active_page : str | None
             The session's active page, used when the request names none.
+        tag : str | None, optional
+            The caller's draft tag when ``session`` is its pool (POOL-11).
 
         Returns
         -------
@@ -541,7 +547,7 @@ class LookService:
             renderer works.
         """
         page = request.page or active_page or "page.html"
-        file_name = draft_name_for(page) if request.draft else page
+        file_name = draft_name_for(page, tag) if request.draft else page
         self._require_file(session, file_name, request.draft)
         return await self._look(session, request, page, file_name)
 

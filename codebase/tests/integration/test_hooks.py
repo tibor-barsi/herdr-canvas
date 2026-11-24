@@ -112,7 +112,8 @@ def test_ses_10_the_first_show_makes_the_reserved_session_real(
     folder = Path(cli("session", "path", extra_env=env).json["folder"])
     (folder / "page.html").write_text("<p>x</p>")
     assert cli("show", extra_env=env).code == 0
-    [found] = cli("session", "list").json["sessions"]
+    listed = cli("session", "list").json["sessions"]
+    [found] = [s for s in listed if s["agent"] != "project"]  # not the pool, A-1022
     assert found["id"] == SESSION and found["agent"] == "claude-code"
     assert Path(found["project"]) == cli.cwd
 

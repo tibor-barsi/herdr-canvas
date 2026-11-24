@@ -78,7 +78,7 @@ async def watch_socket(websocket: WebSocket, svc: Services, publish: Publish) ->
     state, registry, events = svc.state, svc.registry, svc.events
     session_id = websocket.path_params["id"]
     await websocket.accept()
-    if is_project_id(session_id):  # its events go to sessions of the project (PROJ-07)
+    if is_project_id(session_id):  # a pool's events go to its sessions (POOL-05)
         await websocket.close(WS_NO_SESSION)
         return
     if registry.promote(session_id):
@@ -361,13 +361,14 @@ def seen_from_shell(svc: Services, message: dict[str, Any]) -> None:
         return
     if type(version) is not int or not (is_page_name(page) or viewer_type(page)):
         return
+    holder = svc.registry.pool_of(session_id) or session_id  # POOL-01
     try:
-        session = svc.state.session_of(session_id)
+        session = svc.state.session_of(holder)
     except KeyError:
         return
     latest = PageHistory(session.folder).latest(page)
     if latest is not None and 0 < version <= latest[0]:
-        svc.registry.note_seen(session_id, page, version)
+        svc.registry.note_seen(holder, page, version)
 
 
 def event_from_shell(
@@ -382,7 +383,8 @@ def event_from_shell(
     The shell is trusted but the content comes from an untrusted page, so the
     kind, delivery, size and target are checked here. An event from the element
     an ``ask --block`` waits on becomes delivery ``ask`` and goes to that ask
-    only (FB-08). A ``choice`` from an Options box with a submit button is also
+    only (FB-08); any other one about a pool page goes to the pool's log for
+    the card (POOL-05). A ``choice`` from an Options box with a submit button is also
     stored as its answer (ANS-01, #19). One the shell relayed with no action of
     the owner (``no_gesture``) is marked as not from the owner (SEC-09).
     """
@@ -395,7 +397,7 @@ def event_from_shell(
     if too_big or not isinstance(session_id, str):
         return None
     try:
-        session = state.session_of(session_id)
+        session = state.session_of(events.pool_of(session_id) or session_id)
     except KeyError:
         return None
     page = message.get("page")
@@ -408,7 +410,7 @@ def event_from_shell(
     awaited = state.asks.intercept(
         session_id, kind, target["canvas_id"] if target else None
     )
-    event = events.create(
+    event = events.create_for(
         session_id,
         kind,
         delivery="ask" if awaited else delivery,

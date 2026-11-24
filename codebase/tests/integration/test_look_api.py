@@ -11,6 +11,7 @@ import pytest
 
 from agent_canvas.hub.auth import cookie_name
 from agent_canvas.hub.looks import png_size
+from helpers import own_draft
 from shellfake import FakeHeadless, FakeShell, png_answer
 
 pytestmark = pytest.mark.integration
@@ -23,7 +24,7 @@ def session(cli, hub) -> dict:  # noqa: ANN001
     folder = Path(started["folder"])
     (folder / "page.html").write_text("<p>published</p>")
     (folder / "report.html").write_text("<p>report</p>")
-    (folder / "report.draft.html").write_text("<p>draft</p>")
+    (folder / own_draft(started["session"], "report")).write_text("<p>draft</p>")
     headless = FakeHeadless()
     hub.app.state.looks.headless = headless
     return {"id": started["session"], "folder": folder, "headless": headless}
@@ -65,7 +66,9 @@ def test_look_02_window_size_and_scheme_are_the_defaults(
         700,
         "dark",
     )
-    assert request["url"] == hub.state.frame_url(session["id"], "page.html")
+    assert request["url"] == hub.state.frame_url(
+        hub.pool_of(session["id"]), "page.html"
+    )
     assert request["full"] is False and request["section"] is None
     assert answer["source"] == "window" and answer["scheme"] == "dark"
     assert (answer["width"], answer["height"]) == (900, 700)
@@ -259,7 +262,7 @@ def test_look_01_a_draft_is_rendered_from_its_own_file(
     shell = shells(WINDOW)
     answer = look(cli, session, "report", "--draft").json
     assert shell.requests[0]["url"] == hub.state.frame_url(
-        session["id"], "report.draft.html"
+        hub.pool_of(session["id"]), own_draft(session["id"], "report")
     )
     assert answer["draft"] is True and answer["page"] == "report.html"
     again = look(cli, session, "report.draft.html").json
@@ -277,9 +280,12 @@ def test_look_01_missing_files_are_refused_with_their_names(
     cli, session, shells
 ) -> None:  # noqa: ANN001
     shell = shells(WINDOW)
-    (session["folder"] / "report.draft.html").unlink()
+    (session["folder"] / own_draft(session["id"], "report")).unlink()
     no_draft = look(cli, session, "report", "--draft")
-    assert no_draft.code == 1 and "report.draft.html" in no_draft.json["message"]
+    assert (
+        no_draft.code == 1
+        and own_draft(session["id"], "report") in no_draft.json["message"]
+    )
     no_page = look(cli, session, "ghost")
     assert no_page.code == 1 and "ghost.html" in no_page.json["message"]
     assert shell.requests == []

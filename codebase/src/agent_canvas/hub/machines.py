@@ -26,7 +26,7 @@ from urllib.parse import urlsplit
 
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
-from starlette.types import ASGIApp, Receive, Scope, Send
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from websockets.asyncio.client import connect
 from websockets.exceptions import ConnectionClosed, InvalidHandshake
 
@@ -51,6 +51,7 @@ OUTBOX_SIZE = 200
 NEVER_PASSED = {"hello", "render", "herdr"}  # remote tabs are merged, not passed
 PASSED_HEADERS = ("content-type", "content-disposition", "cache-control")
 SESSION_PATH = re.compile(r"/api/sessions/([^/]+)(?:/.*)?")
+BODY_SESSION_PATH = "/api/home/pages"  # the window's pin key names the session here
 
 
 @dataclass
@@ -440,7 +441,16 @@ class MachineRouter:
         match = (
             SESSION_PATH.fullmatch(scope["path"]) if scope["type"] == "http" else None
         )
-        machine = self.machines.owner_of(match[1]) if match else None
+        session = match[1] if match else None
+        if (
+            scope["type"] == "http"
+            and scope["path"] == BODY_SESSION_PATH
+            and self.machines.machines
+        ):
+            body = await _read_body(receive)
+            receive = _replayed(body, receive)
+            session = _session_in(body)
+        machine = self.machines.owner_of(session) if session else None
         if machine is not None:
             request = Request(scope, receive)
             state = self.machines.state
@@ -451,6 +461,36 @@ class MachineRouter:
                 await response(scope, receive, send)
                 return
         await self.app(scope, receive, send)
+
+
+async def _read_body(receive: Receive) -> bytes:
+    body = b""
+    while True:
+        message = await receive()
+        body += message.get("body", b"")
+        if not message.get("more_body"):
+            return body
+
+
+def _replayed(body: bytes, receive: Receive) -> Receive:
+    """Return a ``receive`` that gives the body read already, then the real one."""
+    given = False
+
+    async def replay() -> Message:
+        nonlocal given
+        if given:
+            return await receive()
+        given = True
+        return {"type": "http.request", "body": body, "more_body": False}
+
+    return replay
+
+
+def _session_in(body: bytes) -> Any:
+    try:
+        return json.loads(body).get("session")
+    except (ValueError, AttributeError):
+        return None
 
 
 def _marked(tabs: Any, name: str) -> list[dict[str, Any]]:

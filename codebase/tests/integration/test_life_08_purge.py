@@ -61,6 +61,11 @@ def run_purge(hub) -> list[str]:  # noqa: ANN001
     return hub.on_loop(lambda: purge_module.purge(services.registry))
 
 
+def at(hub, path: str) -> str:  # noqa: ANN001
+    """A path as purge names it: under the id of session ``a``'s pool."""
+    return f"{hub.app.state.registry.pool_of('a')}/{path}"
+
+
 def meta(folder: Path) -> dict:
     return json.loads((folder / "session.json").read_text())
 
@@ -127,7 +132,7 @@ def test_life_08_a_page_archived_30_days_ago_loses_its_data_and_nothing_else(
     gone = [folder / "one.html", *data_of(folder, "one.html")]
     assert all(p.is_file() for p in gone)
     shifted(monkeypatch, 30)
-    assert run_purge(hub) == ["a/one.html"]
+    assert run_purge(hub) == [at(hub, "one.html")]
     assert not any(p.exists() for p in gone)
     after = hashes(around)
     assert set(before) - set(after) == {str(p.relative_to(around)) for p in gone}
@@ -176,7 +181,7 @@ def test_hist_04_a_year_ahead_only_pages_archived_30_days_are_gone(
     kept = {k: v for k, v in hashes(folder).items() if k not in gone}
     assert len(kept) > 15 and len(gone) == 7
     shifted(monkeypatch, 365)
-    assert run_purge(hub) == ["a/one.html"]
+    assert run_purge(hub) == [at(hub, "one.html")]
     assert hashes(folder) == kept
     assert meta(folder)["pages"] == ["two.html", "three.html"]
 
@@ -235,7 +240,9 @@ def test_life_08_nothing_leaves_the_session_folder_through_links_or_names(
     }
     assert len(untouched) == 7
     shifted(monkeypatch, 31)
-    assert sorted(run_purge(hub)) == ["a/one.html", "a/three.html", "a/two.html"]
+    assert sorted(run_purge(hub)) == [
+        at(hub, n) for n in ("one.html", "three.html", "two.html")
+    ]
     assert {k: hashes(around, skip=()).get(k) for k in untouched} == untouched
     assert (outside / "target.html").read_text() == "outside page"
     assert (outside / "one.html.json").read_text() == "outside comment"
@@ -280,12 +287,12 @@ def test_life_08_a_file_another_current_page_refers_to_is_kept_and_logged(
     act(hub, "archive", target)
     shifted(monkeypatch, 31)
     capsys.readouterr()
-    assert run_purge(hub) == ["a/one.html"]
+    assert run_purge(hub) == [at(hub, "one.html")]
     assert (folder / "one.html").read_text() == "<title>one.html</title><p>one.html</p>"
     assert not any(p.exists() for p in data_of(folder, "one.html"))
     assert "one.html" not in meta(folder)["pages"]
     log = capsys.readouterr().err
-    assert f"kept a/one.html (referenced by {page})" in log
+    assert f"kept {at(hub, 'one.html')} (referenced by {page})" in log
 
 
 def test_life_08_a_file_only_an_unrelated_reference_names_is_deleted(
@@ -326,7 +333,7 @@ def test_life_08_pages_that_refer_only_to_each_other_are_both_deleted(
     act(hub, "archive", "one.html")
     act(hub, "archive", "two.html")
     shifted(monkeypatch, 31)
-    assert sorted(run_purge(hub)) == ["a/one.html", "a/two.html"]
+    assert sorted(run_purge(hub)) == [at(hub, "one.html"), at(hub, "two.html")]
     assert not (folder / "one.html").exists() and not (folder / "two.html").exists()
 
 
@@ -346,8 +353,8 @@ def test_life_08_each_deletion_is_one_hub_log_line(
         if "agent-canvas: purge:" in line
     ]
     assert len(lines) == 7
-    assert "agent-canvas: purge: deleted a/one.html" in lines
-    assert "agent-canvas: purge: deleted a/.answers/one.html.json" in lines
+    assert f"agent-canvas: purge: deleted {at(hub, 'one.html')}" in lines
+    assert f"agent-canvas: purge: deleted {at(hub, '.answers/one.html.json')}" in lines
 
 
 def test_life_08_f1_a_page_rewritten_while_the_hub_was_down_is_restored_not_deleted(
@@ -369,7 +376,7 @@ def test_life_08_f1_a_page_rewritten_while_the_hub_was_down_is_restored_not_dele
     time.sleep(0.5)
     assert (folder / "one.html").read_text() == "<p>new work</p>"
     assert "one.html" in meta(folder)["pages"]
-    assert "deleted a/one.html" not in capsys.readouterr().err
+    assert f"deleted {at(hub, 'one.html')}" not in capsys.readouterr().err
 
 
 def test_life_08_f1_purge_keeps_and_restores_a_page_changed_since_it_was_archived(
@@ -388,7 +395,7 @@ def test_life_08_f1_purge_keeps_and_restores_a_page_changed_since_it_was_archive
     assert meta(folder)["page_meta"]["one.html"]["archived"] is None
     assert all(p.is_file() for p in data_of(folder, "one.html"))
     log = capsys.readouterr().err
-    assert "purge: kept a/one.html (changed since it was archived)" in log
+    assert f"purge: kept {at(hub, 'one.html')} (changed since it was archived)" in log
 
 
 def test_life_08_f1_a_page_with_no_version_is_kept_and_restored(

@@ -178,13 +178,14 @@ class HubState:
         url = self.frame_url(session_id, page)
         return f"{url}?ac-view=1" if viewer_type(page) else url
 
-    def show_page(self, session_id: str, page: str) -> None:
+    def show_page(self, session_id: str, page: str, pool: str | None = None) -> None:
         """
         Make ``page`` the active page and tell connected shells.
 
-        Safe to call from any thread.
+        A page of a pool has the pool's address (POOL-03). Safe to call from
+        any thread.
         """
-        self.active_url = self.frame_url(session_id, page)
+        self.active_url = self.frame_url(pool or session_id, page)
         message = {
             "type": "show",
             "session": session_id,

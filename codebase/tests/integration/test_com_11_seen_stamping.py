@@ -42,6 +42,13 @@ def owner(hub) -> httpx.Client:  # noqa: ANN001
 
 def sent_comment(hub, owner, session: str, folder: Path) -> None:  # noqa: ANN001
     (folder / "page.html").write_text("<p>x</p>")
+    shown = httpx.post(  # a pool page's feedback goes to a session that touched it
+        f"{hub.base_url}/api/sessions/{session}/show",
+        headers=hub.key_headers,
+        json={"name": "page.html", "audit": False},
+        timeout=30,
+    )
+    assert shown.status_code == 200, shown.text
     assert (
         owner.post(f"/api/sessions/{session}/comments", json=COMMENT).status_code == 200
     )
@@ -91,8 +98,8 @@ def test_com_11_the_hook_delivery_stamps_the_comment_seen(cli, hub, owner) -> No
         return cli("hook", name, input=json.dumps(data)).out
 
     hook("session-start", source="startup")
-    cli("session", "path", extra_env={"AGENT_CANVAS_SESSION": SESSION})
-    folder = cli.cwd / ".agent-canvas" / SESSION
+    found = cli("session", "path", extra_env={"AGENT_CANVAS_SESSION": SESSION})
+    folder = Path(found.json["folder"])  # the pool's
     sent_comment(hub, owner, SESSION, folder)
     text = json.loads(hook("user-prompt-submit"))["hookSpecificOutput"][
         "additionalContext"

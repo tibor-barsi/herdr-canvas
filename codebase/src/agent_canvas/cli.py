@@ -6,6 +6,7 @@ Kept free of heavy imports so that short commands stay fast (NFR-04).
 from __future__ import annotations
 
 import argparse
+import errno
 import os
 import sys
 from collections.abc import Callable, Sequence
@@ -59,12 +60,6 @@ def build_parser() -> argparse.ArgumentParser:
     creating = _Parser(add_help=False, parents=[session_option])
     creating.add_argument("--agent", help="agent name (default: agent)")
     creating.add_argument("--project", metavar="DIR", help="project directory")
-    project_page = _Parser(add_help=False)
-    project_page.add_argument(
-        "--project-page",
-        action="store_true",
-        help="act on the pages of this session's project, shared by its sessions",
-    )
 
     hub = commands.add_parser("hub", help="run the hub in the foreground")
     hub.add_argument("--port", type=_port, help="port to listen on")
@@ -85,7 +80,7 @@ def build_parser() -> argparse.ArgumentParser:
         "show",
         help="show a page, PDF, Markdown file or picture "
         "(viewer_error says why a file could not be shown)",
-        parents=[creating, project_page],
+        parents=[creating],
     )
     show.add_argument("name", nargs="?", help="page name (default page.html)")
     show.add_argument("--title", help="set the session title")
@@ -93,7 +88,7 @@ def build_parser() -> argparse.ArgumentParser:
     show.add_argument(
         "--publish",
         action="store_true",
-        help="first replace the page by its draft NAME.draft.html",
+        help="first replace the page by your draft NAME.TAG.draft.html",
     )
     show.add_argument(
         "--no-audit", action="store_true", help="skip the automatic page checks"
@@ -107,7 +102,7 @@ def build_parser() -> argparse.ArgumentParser:
     page = commands.add_parser("page", help="set what the canvas knows of a page")
     page_actions = page.add_subparsers(dest="action", metavar="<action>", required=True)
     page_kind = page_actions.add_parser(
-        "kind", help="set the kind of a page", parents=[session_option, project_page]
+        "kind", help="set the kind of a page", parents=[session_option]
     )
     page_kind.add_argument("name", help="page name")
     page_kind.add_argument("kind", help="single-use, transitional or long-term")
@@ -116,6 +111,8 @@ def build_parser() -> argparse.ArgumentParser:
         ("archive", "take a page off its tab (files stay)"),
         ("restore", "bring an archived page back"),
         ("extend", "restart the lifetime of a page"),
+        ("pin", "show a page in the card of every session of the project"),
+        ("unpin", "take a page off the pinned pages"),
     ):
         page_change = page_actions.add_parser(
             action, help=text, parents=[session_option]
@@ -125,20 +122,36 @@ def build_parser() -> argparse.ArgumentParser:
     page_list = page_actions.add_parser(
         "list",
         help="list the pages with kind and expiry",
-        parents=[session_option, project_page],
+        parents=[session_option],
     )
     page_list.add_argument(
         "--archived", action="store_true", help="include archived pages"
     )
     page_list.set_defaults(handler=_cmd_page_list)
+    pages = commands.add_parser("pages", help="work on the pages of a project")
+    pages_actions = pages.add_subparsers(
+        dest="action", metavar="<action>", required=True
+    )
+    pages_migrate = pages_actions.add_parser(
+        "migrate",
+        help="move old session folders' pages into the project's pool "
+        "(dry run unless --yes)",
+    )
+    pages_migrate.add_argument(
+        "--project", metavar="DIR", required=True, help="project directory"
+    )
+    pages_migrate.add_argument("--yes", action="store_true", help="really migrate")
+    pages_migrate.set_defaults(handler=_cmd_pages_migrate)
     look = commands.add_parser(
         "look",
         help="render a page or its draft to a PNG and print where it is "
         "(viewer_error says why a PDF, Markdown file or picture could not be shown)",
-        parents=[session_option, project_page],
+        parents=[session_option],
     )
     look.add_argument("name", nargs="?", help="page name (default: the active page)")
-    look.add_argument("--draft", action="store_true", help="render NAME.draft.html")
+    look.add_argument(
+        "--draft", action="store_true", help="render your draft NAME.TAG.draft.html"
+    )
     look.add_argument(
         "--section", metavar="ID", help="crop to this id or data-canvas-id"
     )
@@ -162,18 +175,20 @@ def build_parser() -> argparse.ArgumentParser:
     look.set_defaults(handler=_cmd_look)
     new = commands.add_parser(
         "new",
-        help="write a page from a template into the session folder",
+        help="write a page from a template into the page folder",
         parents=[creating],
     )
     new.add_argument("name", nargs="?", help="page name (.html is added)")
     new.add_argument("--template", help="template name (see --list)")
     new.add_argument("--list", action="store_true", help="list the templates")
-    new.add_argument("--force", action="store_true", help="overwrite an existing file")
+    new.add_argument(
+        "--force", action="store_true", help="overwrite your own existing draft"
+    )
     new.add_argument(
         "--draft",
         action=argparse.BooleanOptionalAction,
         default=True,
-        help="write NAME.draft.html, a private draft (default); "
+        help="write NAME.TAG.draft.html, your private draft (default); "
         "--no-draft writes NAME.html",
     )
     new.set_defaults(handler=_cmd_new)
@@ -245,7 +260,7 @@ def build_parser() -> argparse.ArgumentParser:
     answers = commands.add_parser(
         "answers",
         help="list the answers to the cards in the shown pages, or wait for them",
-        parents=[session_option, project_page],
+        parents=[session_option],
     )
     answers.add_argument("--page", metavar="P", help="only this page")
     answers.add_argument("--open", action="store_true", help="only open Ask and Do")
@@ -265,7 +280,7 @@ def build_parser() -> argparse.ArgumentParser:
         dest="action", metavar="<action>", required=True
     )
     comment_list = comment_actions.add_parser(
-        "list", help="list sent comments", parents=[session_option, project_page]
+        "list", help="list sent comments", parents=[session_option]
     )
     comment_list.add_argument("page", nargs="?", help="only this page")
     comment_list.add_argument(
@@ -275,7 +290,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     comment_list.set_defaults(handler=_cmd_comment_list)
     comment_reply = comment_actions.add_parser(
-        "reply", help="answer a comment", parents=[session_option, project_page]
+        "reply", help="answer a comment", parents=[session_option]
     )
     comment_reply.add_argument("page")
     comment_reply.add_argument("n", type=int, help="comment number")
@@ -286,7 +301,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     comment_reply.set_defaults(handler=_cmd_comment_reply)
     comment_done = comment_actions.add_parser(
-        "done", help="mark comments done", parents=[session_option, project_page]
+        "done", help="mark comments done", parents=[session_option]
     )
     comment_done.add_argument("page")
     comment_done.add_argument("n", type=int, nargs="+", help="comment numbers")
@@ -295,8 +310,8 @@ def build_parser() -> argparse.ArgumentParser:
     guide.add_argument(
         "topic",
         nargs="?",
-        choices=["blocks", "project-pages"],
-        help="blocks: the block reference; project-pages: shared project pages",
+        choices=["blocks"],
+        help="blocks: the block reference",
     )
     guide.set_defaults(handler=_cmd_guide)
     mcp = commands.add_parser("mcp", help="run the MCP server on stdio")
@@ -370,12 +385,9 @@ def _add_session_commands(
     start.add_argument("--project", metavar="DIR", help="project directory")
     start.set_defaults(handler=_cmd_session_start)
     path = actions.add_parser(
-        "path", help="print the session folder", parents=[creating]
-    )
-    path.add_argument(
-        "--project-page",
-        action="store_true",
-        help="print the folder of the pages of this session's project",
+        "path",
+        help="print the project's page folder and your draft tag",
+        parents=[creating],
     )
     path.set_defaults(handler=_cmd_session_path)
     set_ = actions.add_parser(
@@ -438,18 +450,6 @@ def _session_id(arguments: argparse.Namespace) -> str:
         raise CliError("no-session", str(error)) from error
 
 
-def _project_page(caller: str) -> dict[str, Any]:
-    """Ask the hub for the project pages of the caller's project (PROJ-02)."""
-    path = f"/api/sessions/{caller}/project-page"
-    return _client().request("POST", path, {})
-
-
-def _target_id(arguments: argparse.Namespace) -> str:
-    """Return the session to act on: the caller, or its project pages (PROJ-03)."""
-    caller = _session_id(arguments)
-    return _project_page(caller)["session"] if arguments.project_page else caller
-
-
 def _creation_body(arguments: argparse.Namespace) -> dict[str, Any]:
     """Project and agent fields for commands that may create a session."""
     from agent_canvas.client import resolve_project
@@ -477,6 +477,13 @@ def _cmd_hub(arguments: argparse.Namespace) -> int:
         run_hub(config, state_dir())
     except (ConfigError, KeyFileError, RegistryError) as error:
         raise CliError("failed", str(error)) from error
+    except OSError as error:
+        if error.errno != errno.EADDRINUSE:
+            raise
+        raise CliError(
+            "failed",
+            "The port is taken: a hub is already running or is still starting.",
+        ) from error
     return 0
 
 
@@ -514,8 +521,6 @@ def _cmd_session_start(arguments: argparse.Namespace) -> int:
 def _cmd_session_path(arguments: argparse.Namespace) -> int:
     """Print the session folder, creating the session if unknown."""
     session_id = _session_id(arguments)
-    if arguments.project_page:
-        return emit_result(_project_page(session_id))
     body = _creation_body(arguments)
     return emit_result(
         _client().request("POST", f"/api/sessions/{session_id}/path", body)
@@ -552,11 +557,9 @@ def _cmd_session_list(arguments: argparse.Namespace) -> int:
 
 def _cmd_show(arguments: argparse.Namespace) -> int:
     """Register and show a page."""
-    session_id = _target_id(arguments)
+    session_id = _session_id(arguments)
     body = _creation_body(arguments)
     body.update(name=arguments.name, title=arguments.title)
-    if arguments.project_page:
-        body["by"] = _session_id(arguments)
     if arguments.publish:
         body["publish"] = True
     if arguments.no_audit:
@@ -573,7 +576,7 @@ def _cmd_show(arguments: argparse.Namespace) -> int:
 def _cmd_page_kind(arguments: argparse.Namespace) -> int:
     """Set a page's kind (LIFE-01)."""
     body = {"action": "kind", "name": arguments.name, "kind": arguments.kind}
-    path = f"/api/sessions/{_target_id(arguments)}/pages"
+    path = f"/api/sessions/{_session_id(arguments)}/pages"
     return emit_result(_client().request("POST", path, body))
 
 
@@ -586,15 +589,24 @@ def _cmd_page_change(arguments: argparse.Namespace) -> int:
 
 def _cmd_page_list(arguments: argparse.Namespace) -> int:
     """List the session's pages (LIFE-05)."""
-    path = f"/api/sessions/{_target_id(arguments)}/pages"
+    path = f"/api/sessions/{_session_id(arguments)}/pages"
     if arguments.archived:
         path += "?archived=1"
     return emit_result(_client().request("GET", path))
 
 
+def _cmd_pages_migrate(arguments: argparse.Namespace) -> int:
+    """Show, or with ``--yes`` carry out, the migration of a project (POOL-09)."""
+    body = {
+        "project": str((Path.cwd() / arguments.project).resolve()),
+        "yes": arguments.yes,
+    }
+    return emit_result(_client().request("POST", "/api/pages/migrate", body))
+
+
 def _cmd_look(arguments: argparse.Namespace) -> int:
     """Render a page or draft and print the PNG's path (LOOK-01)."""
-    session_id = _target_id(arguments)
+    session_id = _session_id(arguments)
     body = {
         "page": arguments.name,
         "draft": arguments.draft,
@@ -627,14 +639,15 @@ def _cmd_new(arguments: argparse.Namespace) -> int:
     client = _client()
     # An unknown id creates the session here, as in `show` (SES-03).
     path = f"/api/sessions/{session_id}/path"
-    folder = client.request("POST", path, _creation_body(arguments))["folder"]
+    found = client.request("POST", path, _creation_body(arguments))
     return emit_result(
         new_page_result(
-            Path(folder),
+            Path(found["folder"]),
             arguments.name,
             arguments.template,
             arguments.force,
             arguments.draft,
+            found["tag"],
         )
     )
 
@@ -652,7 +665,7 @@ def _cmd_answers(arguments: argparse.Namespace) -> int:
     """List the cards' answers, or wait for named ones (ANS-04, ANS-05)."""
     from urllib.parse import urlencode
 
-    session_id = _target_id(arguments)
+    session_id = _session_id(arguments)
     if arguments.wait is None:
         if arguments.timeout is not None:
             raise CliError("usage", "--timeout needs --wait.")
@@ -681,7 +694,7 @@ def _cmd_comment_list(arguments: argparse.Namespace) -> int:
     """List the session's sent comments; drafts never appear (RPL-01)."""
     from urllib.parse import urlencode
 
-    session_id = _target_id(arguments)
+    session_id = _session_id(arguments)
     query = {
         k: v for k, v in (("page", arguments.page), ("all", "1" * arguments.all)) if v
     }
@@ -700,14 +713,14 @@ def _cmd_comment_reply(arguments: argparse.Namespace) -> int:
         "done": arguments.done,
         "from": arguments.author,
     }
-    path = f"/api/sessions/{_target_id(arguments)}/comments/reply"
+    path = f"/api/sessions/{_session_id(arguments)}/comments/reply"
     return emit_result(_client().request("POST", path, body))
 
 
 def _cmd_comment_done(arguments: argparse.Namespace) -> int:
     """Mark comments done (RPL-02)."""
     body = {"page": arguments.page, "n": arguments.n}
-    path = f"/api/sessions/{_target_id(arguments)}/comments/done"
+    path = f"/api/sessions/{_session_id(arguments)}/comments/done"
     return emit_result(_client().request("POST", path, body))
 
 
@@ -895,9 +908,9 @@ def _cmd_uninstall_tunnel(arguments: argparse.Namespace) -> int:
 
 def _cmd_guide(arguments: argparse.Namespace) -> int:
     """Print the guideline (the plugin skill body, CLI-13) or the block reference."""
-    from agent_canvas.guide_text import blocks_text, guide_text, project_pages_text
+    from agent_canvas.guide_text import blocks_text, guide_text
 
-    topics = {"blocks": blocks_text, "project-pages": project_pages_text}
+    topics = {"blocks": blocks_text}
     sys.stdout.write(topics.get(arguments.topic, guide_text)())
     sys.stdout.flush()
     return 0

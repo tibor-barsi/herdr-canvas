@@ -16,7 +16,11 @@ HISTORY_PAGES = Path("history") / "pages"
 
 
 def write_safely(
-    path: Path, content: str | bytes, mode: int | None = None, exact: bool = False
+    path: Path,
+    content: str | bytes,
+    mode: int | None = None,
+    exact: bool = False,
+    new: bool = False,
 ) -> None:
     """
     Write ``content`` to ``path`` through a temporary file and an atomic rename.
@@ -36,6 +40,9 @@ def write_safely(
         ``os.open``. None leaves the default (0o666 under the umask).
     exact : bool, optional
         Set ``mode`` exactly, whatever the umask (needs ``mode``).
+    new : bool, optional
+        Never replace a file: raise ``FileExistsError`` if ``path`` exists, even
+        one made after the call began (the rename is a hard link then).
     """
     data = content.encode() if isinstance(content, str) else content
     temporary = path.with_name(f".{uuid.uuid4().hex}.tmp")
@@ -47,7 +54,11 @@ def write_safely(
             if exact:
                 os.fchmod(handle.fileno(), mode)
             handle.write(data)
-        os.replace(temporary, path)
+        if new:
+            os.link(temporary, path)
+            temporary.unlink()
+        else:
+            os.replace(temporary, path)
     except BaseException:
         temporary.unlink(missing_ok=True)
         raise

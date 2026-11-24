@@ -105,7 +105,7 @@ def test_agi_13_the_skill_stays_under_the_word_cap() -> None:
 def test_agi_14_the_example_has_draft_look_publish_and_the_answer() -> None:
     loop = " ".join(loop_section().split())
     for phrase in (
-        "infill.draft.html", "agent-canvas look infill --draft", '"png":',
+        "infill.TAG.draft.html", "agent-canvas look infill --draft", '"png":',
         '"audit": {"findings"', "agent-canvas show infill --publish", '"next":',
         "agent-canvas watch --timeout 540", '"kind": "answer"', "owner's next message",
     ):  # fmt: skip

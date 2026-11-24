@@ -59,8 +59,9 @@ class HerdrApp:
         Herdr's config folder (``view.json``, ``shared.json``).
     docs_path : pathlib.Path
         The core's ``docs.json``, which holds each tab's split tree.
-    sessions_dir : pathlib.Path
-        Claude Code's ``sessions`` folder.
+    sessions_dir : pathlib.Path or None
+        Claude Code's ``sessions`` folder; by default ``~/.claude/sessions`` of the
+        home at the time of the call.
     proc_dir : pathlib.Path
         Where a live process has a folder named by its pid.
     known_sessions : Callable[[], list[str]]
@@ -73,7 +74,7 @@ class HerdrApp:
         core: str = "hc",
         config_dir: Path = Path.home() / ".config" / "herdr-app",
         docs_path: Path = Path.home() / ".local/state/herdr-core/default/docs.json",
-        sessions_dir: Path = Path.home() / ".claude" / "sessions",
+        sessions_dir: Path | None = None,
         proc_dir: Path = Path("/proc"),
         known_sessions: Callable[[], list[str]] = list,
     ) -> None:
@@ -184,6 +185,32 @@ class HerdrApp:
             if pane["session"]
         }
 
+    def alive(self, session_id: str) -> bool:
+        """
+        Tell whether a session sits in a pane, or runs in a live Claude Code process.
+
+        The second covers a session that takes feedback only through its prompt
+        hook on a machine whose canvas sees no Herdr panes (POOL-05, A-1120).
+        """
+        if session_id in self.paired():
+            return True
+        return any(
+            self._runs_claude(path.stem)
+            and self._read(path).get("sessionId") == session_id
+            for path in self._claude_sessions().glob("*.json")
+            if path.stem.isdigit()
+        )
+
+    def _claude_sessions(self) -> Path:
+        return self.sessions_dir or Path.home() / ".claude" / "sessions"
+
+    def _runs_claude(self, pid: str) -> bool:
+        """Tell whether process ``pid`` lives and is Claude Code (pids are reused)."""
+        try:
+            return (self.proc_dir / pid / "comm").read_text().strip() == "claude"
+        except OSError:
+            return False
+
     def poll(self) -> bool:
         """Read the snapshot into ``last``; True when it changed."""
         current = self.snapshot()
@@ -255,7 +282,7 @@ class HerdrApp:
             if not (self.proc_dir / str(pid)).exists():
                 return None
             self._pids[terminal] = pid
-        return self._read(self.sessions_dir / f"{pid}.json").get("sessionId")
+        return self._read(self._claude_sessions() / f"{pid}.json").get("sessionId")
 
     @staticmethod
     def _roots(docs: dict[str, Any], prefix: str = "") -> dict[str, Any]:

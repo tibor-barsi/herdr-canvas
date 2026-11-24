@@ -195,7 +195,7 @@ def test_res_02_an_old_card_cannot_be_answered(cli, session, hub, owner) -> None
 
 
 def test_res_02_a_page_in_the_folder_is_a_page_chip(cli, session, hub) -> None:  # noqa: ANN001, F811
-    folder = hub.state.session_of("a").folder
+    folder = Path(cli("session", "path", "--session", "a").json["folder"])  # POOL-01
     (folder / "plan.html").write_text("<title>p</title>")
     cli("show", "plan.html", "--session", "a")
     other = Path("/abs/plan.html")

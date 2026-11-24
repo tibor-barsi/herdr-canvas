@@ -231,9 +231,12 @@ def test_mch_01_remote_sessions_updates_comments_and_send_pass_through(
     assert by_id[remote_id]["machine"] == "rem"
     assert by_id[remote_id]["base"].startswith(f"http://localhost:{link.remote.port}/")
     assert by_id[local]["machine"] is None
+    pool = by_id[remote_id]["pool"]  # the project's pool is a tab of its own (Q4)
+    assert pool.startswith("project-") and by_id[pool]["machine"] == "rem"
     entry = machine_entry(window.wait(in_state("online")))
+    entry["other"] = sorted(entry["other"])
     assert entry == {"name": "rem", "state": "online", "detail": None,
-                     "other": [remote_id]}  # fmt: skip
+                     "other": sorted([remote_id, pool])}  # fmt: skip
 
     (folder / "page.html").write_text("<p>v2 remote</p>")
     update = window.wait(lambda m: m["type"] == "update" and "v2" in m["html"])
@@ -324,7 +327,9 @@ def test_mch_03_link_drop_goes_offline_and_back_resends_tabs(
     mark = len(window.seen)
     window.wait(in_state("online"), timeout=15)
     tabs = [m for m in window.seen[mark:] if with_session(remote_id)(m)][-1]
-    assert [t["machine"] for t in tabs["sessions"]] == ["rem"]
+    machines_of = {t["id"]: t["machine"] for t in tabs["sessions"]}
+    pool = next(t["pool"] for t in tabs["sessions"] if t["id"] == remote_id)
+    assert machines_of == {remote_id: "rem", pool: "rem"}  # with its pool (Q4)
 
 
 def test_mch_04_port_clash_and_no_canvas_say_why(link: Link, hub: HubHandle) -> None:
@@ -348,7 +353,8 @@ def test_mch_05_no_machines_leaves_this_hub_as_it_was(
     ).json()["session"]
     window = Window(hub)
     tabs = window.wait(with_session(sid))
-    assert [t["machine"] for t in tabs["sessions"]] == [None]
+    machines_of = {t["id"]: t["machine"] for t in tabs["sessions"]}
+    assert machines_of == {sid: None}  # its pool holds no page, so no tab (A-1144)
     herdr = window.wait(lambda m: m["type"] == "herdr")
     assert herdr["machines"] == []
     connection = http.client.HTTPConnection("127.0.0.1", hub.port)

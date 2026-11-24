@@ -58,6 +58,14 @@ def start(cli, *args: str) -> tuple[str, Path]:
     return done.json["session"], Path(done.json["folder"])
 
 
+def start_own(cli) -> tuple[str, Path]:
+    """Start a session; return its id and its own folder, which ``--session`` cleans."""
+    sid, pool = start(cli)
+    own = pool.parent / sid  # not the pool: --session never touches it (A-1005)
+    assert (own / "session.json").is_file()
+    return sid, own
+
+
 def populate(folder: Path) -> dict[str, Path]:
     """A session with old and new history, an old page and a three-event log."""
     files = {
@@ -81,9 +89,10 @@ def populate(folder: Path) -> dict[str, Path]:
         event_line("evt_new", 3, 1),
     ]
     # The hub's watcher saves the new page as the next history version; wait for
-    # it so that it cannot appear in the middle of a test.
+    # it so that it cannot appear in the middle of a test. It watches pools only.
     deadline = time.monotonic() + 10
-    while not (folder / "history/pages/page.0003.html").exists():
+    watched = folder.name.startswith("pool-")
+    while watched and not (folder / "history/pages/page.0003.html").exists():
         assert time.monotonic() < deadline, "the hub did not save the page"
         time.sleep(0.02)
     files["events"] = put(folder / "events.jsonl", "\n".join(lines) + "\n", age_days=0)
@@ -181,6 +190,7 @@ def test_cli_11_kept_queued_event_is_still_delivered_afterwards(cli) -> None:
     sid, folder = start(cli)
     populate(folder)
     cli("cleanup", "--older-than", "30d", "--yes")
+    cli("show", "page.html", "--session", sid)  # the pool's inbox serves who touched it
     pending = cli("pending", "--session", sid).json["events"]
     assert [e["id"] for e in pending] == ["evt_oldqueued", "evt_new"]
 
@@ -189,7 +199,7 @@ def test_cli_11_kept_queued_event_is_still_delivered_afterwards(cli) -> None:
 
 
 def test_cli_11_session_on_an_active_session_keeps_its_pages(cli) -> None:
-    sid, folder = start(cli)
+    sid, folder = start_own(cli)
     files = populate(folder)
     data = cli("cleanup", "--session", sid, "--yes", "--force").json
     assert data["dry_run"] is False
@@ -202,7 +212,7 @@ def test_cli_11_session_on_an_active_session_keeps_its_pages(cli) -> None:
 
 
 def test_cli_11_session_without_force_keeps_queued_events(cli) -> None:
-    sid, folder = start(cli)
+    sid, folder = start_own(cli)
     files = populate(folder)
     data = cli("cleanup", "--session", sid, "--yes").json
     assert set(data["kept_queued"]) == {"evt_oldqueued", "evt_new"}
@@ -212,7 +222,7 @@ def test_cli_11_session_without_force_keeps_queued_events(cli) -> None:
 
 
 def test_cli_11_session_dry_run_changes_nothing(cli) -> None:
-    sid, folder = start(cli)
+    sid, folder = start_own(cli)
     populate(folder)
     cli("session", "end", "--session", sid)
     before = sorted(folder.rglob("*"))
@@ -222,7 +232,7 @@ def test_cli_11_session_dry_run_changes_nothing(cli) -> None:
 
 
 def test_cli_11_session_on_an_ended_session_removes_folder_and_entry(cli) -> None:
-    sid, folder = start(cli)
+    sid, folder = start_own(cli)
     populate(folder)
     cli("session", "end", "--session", sid)
     data = cli("cleanup", "--session", sid, "--yes", "--force").json
@@ -236,7 +246,7 @@ def test_cli_11_session_on_an_ended_session_removes_folder_and_entry(cli) -> Non
 
 
 def test_cli_11_ended_session_with_a_kept_queued_event_stays(cli) -> None:
-    sid, folder = start(cli)
+    sid, folder = start_own(cli)
     populate(folder)
     cli("session", "end", "--session", sid)
     data = cli("cleanup", "--session", sid, "--yes").json
@@ -300,7 +310,7 @@ def test_cli_11_unknown_and_malformed_sessions_exit_5(cli) -> None:
 
 
 def test_sec_08_cleanup_does_not_follow_a_history_symlink(cli, tmp_path: Path) -> None:
-    sid, folder = start(cli)
+    sid, folder = start_own(cli)
     outside = tmp_path / "outside"
     put(outside / "pages/page.0001.html", age_days=60)
     (folder / "history").symlink_to(outside)
@@ -343,7 +353,7 @@ def test_cli_11_older_than_never_touches_comments_or_answers(cli) -> None:
 
 
 def test_cli_11_session_deletes_comments_and_answers_and_lists_them(cli) -> None:
-    sid, folder = start(cli)
+    sid, folder = start_own(cli)
     files = populate(folder)
     state = put_state(folder)
     dry = cli("cleanup", "--session", sid).json
@@ -358,7 +368,7 @@ def test_cli_11_session_deletes_comments_and_answers_and_lists_them(cli) -> None
 def test_cli_11_session_does_not_follow_a_comments_or_answers_symlink(
     cli, tmp_path: Path
 ) -> None:
-    sid, folder = start(cli)
+    sid, folder = start_own(cli)
     outside = tmp_path / "outside"
     keep = [put(outside / "a.json", "{}", age_days=60), put(outside / "b.json")]
     (folder / ".comments").symlink_to(outside)

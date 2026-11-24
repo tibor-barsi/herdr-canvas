@@ -176,15 +176,17 @@ class ResultService:
         Return the card the tab shows, or None.
 
         Files carry ``name`` (the base name) and ``page`` (the page name when the
-        file is a page of the session's folder, else None).
+        file is a page of the session's pool, or of its own folder without one).
         """
         meta = self._registry.get(session_id)
         card = meta.result if meta else None
         if card is None or card["state"] == "dismissed":
             return None
-        folder = self._registry.folder_of(meta)
+        pool = self._registry.pool_of(session_id)
+        holder = (self._registry.get(pool) if pool else None) or meta
+        folder = self._registry.folder_of(holder)
         files = [
-            {"path": p, "name": Path(p).name, "page": _page_of(meta, folder, p)}
+            {"path": p, "name": Path(p).name, "page": _page_of(holder, folder, p)}
             for p in card["files"]
         ]
         return {**card, "files": files}

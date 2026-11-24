@@ -167,7 +167,8 @@ def test_res_02_dismiss_creates_no_event_and_hides_the_card(setup: Setup) -> Non
 def test_res_02_the_tab_card_names_page_files_and_leaves_other_files_as_paths(
     setup: Setup,
 ) -> None:
-    folder = setup.registry.folder_of(setup.meta)
+    pool = setup.registry.pool_session(setup.meta["project"])  # POOL-01
+    folder = setup.registry.folder_of(pool)
     (folder / "page.html").write_text("<title>t</title>")
     setup.registry.show("s1", "page.html", None, None)
     other = str(folder / "other.csv")

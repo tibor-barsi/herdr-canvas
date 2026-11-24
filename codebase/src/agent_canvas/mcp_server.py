@@ -53,10 +53,6 @@ Session = Annotated[
         description="Session id; may be omitted only if AGENT_CANVAS_SESSION is set."
     ),
 ]
-ProjectPage = Annotated[
-    bool,
-    Field(description="Act on the pages shared by all sessions of this project."),
-]
 TimeoutS = Annotated[
     int | float,
     Field(
@@ -99,18 +95,14 @@ def create_server() -> MCPServer:
         return await _run(work)
 
     @server.tool()
-    async def session_path(
-        session: Session = None, project_page: ProjectPage = False
-    ) -> CallToolResult:
-        """Return the session folder (created if needed); write pages there.
+    async def session_path(session: Session = None) -> CallToolResult:
+        """Return the page folder (created if needed) and your draft `tag`.
 
-        With `project_page`, the folder of the project's shared pages instead.
+        Write drafts there as `NAME.TAG.draft.html`; pages belong to the project.
         """
 
         def work() -> dict[str, Any]:
             sid = _session(session)
-            if project_page:
-                return _project_page(sid)
             return _client().request(
                 "POST", f"/api/sessions/{sid}/path", _creation_body(None, None)
             )
@@ -147,19 +139,15 @@ def create_server() -> MCPServer:
         publish: bool = False,
         audit: bool = True,
         kind: Literal["single-use", "transitional", "long-term"] | None = None,
-        project_page: ProjectPage = False,
     ) -> CallToolResult:
-        """Show a page of the session folder (default page.html) in the window.
-
-        With `project_page`, the page is one of the project's shared pages, in
-        the folder `session_path` gives with `project_page`.
+        """Show a page of the page folder (default page.html) in the window.
 
         `kind` sets how long the page stays: `single-use` for a question, choice
         or plan (3 days after it is answered), `transitional` for work in
         progress (30 days, the default), `long-term` for a dashboard (never).
 
-        With `publish`, the page is first replaced by its private draft
-        NAME.draft.html (write the draft, `look` at it, then publish). The JSON
+        With `publish`, the page is first replaced by your private draft
+        NAME.TAG.draft.html (write the draft, `look` at it, then publish). The JSON
         has `audit`: a summary line and the error and warning findings of the
         automatic page checks (or "pending" if they took longer than ~4 s);
         `audit` false skips them. For a PDF, Markdown file or picture `audit` is
@@ -168,11 +156,9 @@ def create_server() -> MCPServer:
         """
 
         def work() -> dict[str, Any]:
-            sid = _target(session, project_page)
+            sid = _session(session)
             body = _creation_body(None, None)
             body.update(name=page, title=title)
-            if project_page:
-                body["by"] = _session(session)
             if publish:
                 body["publish"] = True
             if not audit:
@@ -185,23 +171,24 @@ def create_server() -> MCPServer:
 
     @server.tool()
     async def page(
-        action: Literal["kind", "archive", "restore", "extend", "list"],
+        action: Literal["kind", "archive", "restore", "extend", "pin", "unpin", "list"],
         name: str | None = None,
         kind: Literal["single-use", "transitional", "long-term"] | None = None,
         archived: bool = False,
         session: Session = None,
-        project_page: ProjectPage = False,
     ) -> CallToolResult:
-        """Set the kind of a page, archive, restore or extend it, or list pages.
+        """Set the kind of a page; archive, restore, extend, pin, unpin; list pages.
 
         `kind` sets the kind of page `name` (the owner's choice wins);
         `archive` takes it off its tab (files stay), `restore` it, `extend` its
-        lifetime, or `list` the pages with their expiry (`archived` adds the
-        archived ones). `show` or a new version also restores a page.
+        lifetime, `pin` it so it shows in the card of every session of the
+        project (`unpin` undoes that), or `list` the project's pages with their
+        expiry and pins (`archived` adds the archived ones). `show` or a new
+        version also restores a page.
         """
 
         def work() -> dict[str, Any]:
-            path = f"/api/sessions/{_target(session, project_page)}/pages"
+            path = f"/api/sessions/{_session(session)}/pages"
             if action == "list":
                 return _client().request(
                     "GET", path + ("?archived=1" if archived else "")
@@ -219,11 +206,12 @@ def create_server() -> MCPServer:
         force: bool = False,
         draft: bool = True,
     ) -> CallToolResult:
-        """Write a page from a template into the session folder.
+        """Write a page from a template into the page folder.
 
-        Templates: compare, results, run, geometry, cards. By default the private draft
-        `name`.draft.html is written (`look` at it, then `show` with `publish`);
-        with `draft` false, `name`.html. Nothing is overwritten unless `force`.
+        Templates: compare, results, run, geometry, cards. By default your private
+        draft `name`.TAG.draft.html is written (`look` at it, then `show` with
+        `publish`); `force` overwrites a draft. With `draft` false, `name`.html is
+        written, and never over a page that exists.
         Without `name` and `template` the templates are listed.
         """
 
@@ -237,7 +225,9 @@ def create_server() -> MCPServer:
             answer = client.request(
                 "POST", f"/api/sessions/{sid}/path", _creation_body(None, None)
             )
-            return new_page_result(Path(answer["folder"]), name, template, force, draft)
+            return new_page_result(
+                Path(answer["folder"]), name, template, force, draft, answer["tag"]
+            )
 
         return await _run(work)
 
@@ -252,7 +242,6 @@ def create_server() -> MCPServer:
         height: int | None = None,
         scheme: Literal["light", "dark"] | None = None,
         audit: bool = True,
-        project_page: ProjectPage = False,
     ) -> CallToolResult:
         """Render a page (or with `draft` its private draft) and return the picture.
 
@@ -269,7 +258,7 @@ def create_server() -> MCPServer:
         """
 
         def work() -> dict[str, Any]:
-            sid = _target(session, project_page)
+            sid = _session(session)
             body = {
                 "page": page, "draft": draft, "section": section, "full": full,
                 "width": width, "height": height, "scheme": scheme,
@@ -376,14 +365,13 @@ def create_server() -> MCPServer:
         session: Session = None,
         page: str | None = None,
         all: bool = False,
-        project_page: ProjectPage = False,
     ) -> CallToolResult:
         """List the owner's sent comments (open ones; `all` adds answered and done)."""
 
         def work() -> dict[str, Any]:
             query = {"page": page, "all": "1" if all else None}
             tail = urlencode({k: v for k, v in query.items() if v})
-            path = f"/api/sessions/{_target(session, project_page)}/comments"
+            path = f"/api/sessions/{_session(session)}/comments"
             return _client().request("GET", path + ("?" + tail if tail else ""))
 
         return await _run(work, images=True)
@@ -396,7 +384,6 @@ def create_server() -> MCPServer:
         wait: bool = False,
         ids: list[str] | None = None,
         timeout_s: TimeoutS | None = None,
-        project_page: ProjectPage = False,
     ) -> CallToolResult:
         """List the answers to Ask, Do, Decision and Options box items on shown pages.
 
@@ -406,7 +393,7 @@ def create_server() -> MCPServer:
         """
 
         def work() -> dict[str, Any]:
-            sid = _target(session, project_page)
+            sid = _session(session)
             client = _client()
             if not wait:
                 if timeout_s is not None:
@@ -432,11 +419,10 @@ def create_server() -> MCPServer:
         session: Session = None,
         done: bool = False,
         from_: Annotated[str | None, Field(alias="from")] = None,
-        project_page: ProjectPage = False,
     ) -> CallToolResult:
         def work() -> dict[str, Any]:
             body = {"page": page, "n": n, "text": text, "done": done, "from": from_}
-            path = f"/api/sessions/{_target(session, project_page)}/comments/reply"
+            path = f"/api/sessions/{_session(session)}/comments/reply"
             return _client().request("POST", path, body)
 
         return await _run(work)
@@ -456,12 +442,11 @@ def create_server() -> MCPServer:
         page: str,
         n: list[int],
         session: Session = None,
-        project_page: ProjectPage = False,
     ) -> CallToolResult:
         """Mark the comments `n` of `page` done."""
 
         def work() -> dict[str, Any]:
-            path = f"/api/sessions/{_target(session, project_page)}/comments/done"
+            path = f"/api/sessions/{_session(session)}/comments/done"
             return _client().request("POST", path, {"page": page, "n": n})
 
         return await _run(work)
@@ -520,17 +505,6 @@ def _session(argument: str | None) -> str:
         return resolve_session_id(argument, os.environ)
     except InvalidSessionId as error:
         raise CliError("no-session", str(error)) from error
-
-
-def _project_page(caller: str) -> dict[str, Any]:
-    """Ask the hub for the project pages of the caller's project (PROJ-02)."""
-    return _client().request("POST", f"/api/sessions/{caller}/project-page", {})
-
-
-def _target(session: str | None, project_page: bool) -> str:
-    """Return the session to act on: the caller, or its project pages (PROJ-03)."""
-    caller = _session(session)
-    return _project_page(caller)["session"] if project_page else caller
 
 
 def _creation_body(project: str | None, agent: str | None) -> dict[str, Any]:
