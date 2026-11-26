@@ -11,7 +11,7 @@ from starlette.routing import BaseRoute
 
 from agent_canvas.drafts import is_draft_name
 from agent_canvas.hub.auth import KEY_HEADER
-from agent_canvas.hub.registry import RegistryError
+from agent_canvas.hub.registry import RegistryError, pool_key
 from agent_canvas.hub.routes.helper import (
     Declaration,
     Publish,
@@ -52,7 +52,7 @@ def _refused(message: str, status: int) -> Response:
 
 
 async def upload_file(request: Request, svc: Services, publish: Publish) -> Response:
-    """Store the request body as a page of a session and open it (VIEW-10)."""
+    """Store the request body as a page of a session's pool and open it (VIEW-10)."""
     if svc.state.credentials.key_ok(request.headers.get(KEY_HEADER)):
         return _refused("Only the owner's window may upload files.", 403)
     session_id, registry = request.path_params["id"], svc.registry
@@ -67,7 +67,11 @@ async def upload_file(request: Request, svc: Services, publish: Publish) -> Resp
         if not registry.is_reserved(session_id):
             return failure(RegistryError("no-session", "Unknown session."))
         registry.ensure(session_id, "", "agent")
-    folder = registry.folder_of(registry.get(session_id))
+    try:
+        pool = registry.pool_session(pool_key(registry.get(session_id).project))
+    except RegistryError as error:
+        return failure(error)
+    folder = registry.folder_of(pool)
     make_private_dirs(folder)
     temporary = folder / f".upload-{uuid.uuid4().hex[:12]}"
     try:
@@ -122,9 +126,10 @@ async def open_file(request: Request, svc: Services, publish: Publish) -> Respon
 async def _listed(svc: Services, publish: Publish, session_id: str, page: str) -> int:
     """Watch and version a page that ``registry.show`` just listed; tell the windows."""
     svc.watcher.refresh()
-    svc.state.reset_page_status(session_id, page)
+    holder = svc.registry.pool_of(session_id) or session_id  # the page is the pool's
+    svc.state.reset_page_status(holder, page)
     version = await svc.watcher.ingest(
-        svc.state.session_of(session_id), page, push=False, notify=False
+        svc.state.session_of(holder), page, push=False, notify=False
     )
     publish("tabs")
     return version

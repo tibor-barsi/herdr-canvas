@@ -19,9 +19,9 @@ def session(owner, tmp_path, name: str) -> str:  # noqa: ANN001
     directory.mkdir()
     body = {"project": str(directory), "agent": "claude", "title": name}
     sid = call(owner, "POST", "/api/sessions", json=body)["session"]
-    (owner.hub.state.session_of(sid).folder / f"{name}.html").write_text(
-        f"<p>{name}</p>"
-    )
+    (
+        owner.hub.state.session_of(owner.hub.pool_of(sid)).folder / f"{name}.html"
+    ).write_text(f"<p>{name}</p>")
     show = {"project": str(directory), "name": f"{name}.html"}
     call(owner, "POST", f"/api/sessions/{sid}/show", json=show)
     return sid
@@ -80,7 +80,8 @@ def test_hcw_01_cards_and_focus_follow_herdr_both_ways(owner, tmp_path) -> None:
     # The hub's poll sends the herdr view: one space, two cards, the focused one shown.
     page.wait_for_selector(".hv-row .hv-name >> text=lab")
     page.wait_for_function("(id) => activeId === id", arg=a)
-    assert page.locator(".hv-row .hv-name").all_inner_texts() == ["lab"]
+    # Each project's pool holds a page, no pane holds it: "Not in Herdr" (A-1144).
+    assert page.locator(".hv-row .hv-name").all_inner_texts() == ["lab", "Not in Herdr"]
     assert page.locator(".hv-card").count() == 2
     assert page.locator(f'.hv-card[data-session="{b}"] .hv-frame iframe').count() == 1
     assert page.locator(f'.hv-card[data-session="{a}"] .hv-frame iframe').count() == 0

@@ -136,6 +136,10 @@ class HubHandle:
         """Header carrying the access key (CLI style)."""
         return {"X-Agent-Canvas-Key": self.key}
 
+    def pool_of(self, session_id: str) -> str:
+        """Return the id of the pool holding the session's pages, else the id."""
+        return self.app.state.registry.pool_of(session_id) or session_id
+
     def login_url(self) -> str:
         """Mint a one-time login URL for the owner window."""
         return f"{self.base_url}/login?t={self.state.new_login_token()}"
@@ -205,10 +209,16 @@ class HubHandle:
         )
 
     def event_state(self, session_id: str, event_id: str) -> str:
-        """Return ``queued`` or ``delivered`` for an event."""
-        return self.on_loop(
-            lambda: self.state.events.get(session_id, event_id)["state"]
-        )
+        """Return ``queued`` or ``delivered``; a card's event may be in its pool."""
+
+        def state() -> str:
+            events = self.state.events
+            found = events.get(session_id, event_id)
+            if found is None and (pool := events.pool_of(session_id)):
+                found = events.get(pool, event_id)
+            return found["state"]
+
+        return self.on_loop(state)
 
     def listening(self, session_id: str) -> bool:
         """Return True while a listener is connected for the session."""

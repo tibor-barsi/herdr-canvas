@@ -34,7 +34,10 @@ def pdf_file(name: str = "report.pdf") -> tuple[str, str, str]:
 
 def pages_of(studio, sid: str) -> list[str]:  # noqa: ANN001
     meta = json.loads(
-        (studio.owner.hub.state.session_of(sid).folder / "session.json").read_text()
+        (
+            studio.owner.hub.state.session_of(studio.owner.hub.pool_of(sid)).folder
+            / "session.json"
+        ).read_text()
     )
     return meta["pages"]
 
@@ -71,7 +74,7 @@ def test_view_09_a_zip_is_refused_with_a_notice(studio) -> None:  # noqa: ANN001
     studio.page.wait_for_function(
         "document.getElementById('notice-text').textContent.includes('more.zip')"
     )
-    folder = studio.owner.hub.state.session_of(sid).folder
+    folder = studio.owner.hub.state.session_of(studio.owner.hub.pool_of(sid)).folder
     assert not list(folder.glob("*.zip"))
     assert pages_of(studio, sid) == ["page.html"]
 

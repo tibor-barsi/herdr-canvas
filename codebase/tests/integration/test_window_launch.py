@@ -206,12 +206,22 @@ def read_meta(folder: Path) -> dict:
     return json.loads((folder / "session.json").read_text())
 
 
+def own_meta(folder: Path, sid: str) -> dict:
+    """The session's own record, beside the pool folder it shows pages from."""
+    return read_meta(folder.parent / sid)
+
+
+def cards(tabs: list[dict]) -> list[dict]:
+    """The session tabs, without the pool's own tab (POOL Q4)."""
+    return [t for t in tabs if t["agent"] != "project"]
+
+
 def test_ses_06_title_falls_back_to_page_title_then_session_prefix(hub, home) -> None:
     sid, folder = prepared(
         hub, home, "<html><head><title>  My &amp; page </title></head><body>x</body>"
     )
     post_show(hub, sid, home / "proj")
-    assert [t["title"] for t in hub.state.tabs_provider()] == ["My & page"]
+    assert [t["title"] for t in cards(hub.state.tabs_provider())] == ["My & page"]
     other, other_folder = new_session(hub, home)
     (other_folder / "page.html").write_text("<p>no title</p>")
     post_show(hub, other, home / "proj")
@@ -226,25 +236,25 @@ def test_ses_06_rename_keeps_both_titles_and_wins_over_agent(hub, home) -> None:
         hub, "POST", f"/api/sessions/{sid}/rename", json={"title": "Mine"}
     ).is_success
     api(hub, "POST", f"/api/sessions/{sid}/title", json={"title": "Agent"})
-    meta = read_meta(folder)
+    meta = own_meta(folder, sid)
     assert (meta["owner_title"], meta["title"]) == ("Mine", "Agent")
-    assert hub.state.tabs_provider()[0]["title"] == "Mine"
+    assert cards(hub.state.tabs_provider())[0]["title"] == "Mine"
     api(hub, "POST", f"/api/sessions/{sid}/rename", json={"title": " "})
-    assert hub.state.tabs_provider()[0]["title"] == "Agent"
+    assert cards(hub.state.tabs_provider())[0]["title"] == "Agent"
 
 
 def test_ses_08_hide_sets_hidden_and_show_unhides(hub, home) -> None:
     sid, folder = prepared(hub, home)
     post_show(hub, sid, home / "proj")
     api(hub, "POST", f"/api/sessions/{sid}/end", json={})
-    assert hub.state.tabs_provider()[0]["state"] == "ended"
+    assert cards(hub.state.tabs_provider())[0]["state"] == "ended"
     api(hub, "POST", f"/api/sessions/{sid}/hide", json={})
-    assert read_meta(folder)["hidden"] is True
-    assert hub.state.tabs_provider() == []
+    assert own_meta(folder, sid)["hidden"] is True
+    assert cards(hub.state.tabs_provider()) == []
     assert (folder / "page.html").exists()
     post_show(hub, sid, home / "proj")
-    assert read_meta(folder)["hidden"] is False
-    assert [t["id"] for t in hub.state.tabs_provider()] == [sid]
+    assert own_meta(folder, sid)["hidden"] is False
+    assert [t["id"] for t in cards(hub.state.tabs_provider())] == [sid]
 
 
 # ---- SES-12 / SES-07 on the hub ---------------------------------------------------
@@ -260,14 +270,14 @@ def test_ses_12_tabs_message_lists_closed_sessions_and_unhide_reopens_one(
     for sid in (older, newer):
         api(hub, "POST", f"/api/sessions/{sid}/hide", json={})
     message = hub.state.tabs_message()
-    assert message["sessions"] == []
+    assert cards(message["sessions"]) == []
     assert [t["id"] for t in message["closed"]] == [newer, older]
     assert message["closed"][0]["pages"] == ["page.html"]
     answer = api(hub, "POST", f"/api/sessions/{older}/unhide", json={})
     assert answer.json() == {"session": older, "hidden": False}
-    assert read_meta(older_folder)["hidden"] is False
+    assert own_meta(older_folder, older)["hidden"] is False
     message = hub.state.tabs_message()
-    assert [t["id"] for t in message["sessions"]] == [older]
+    assert [t["id"] for t in cards(message["sessions"])] == [older]
     assert [t["id"] for t in message["closed"]] == [newer]
 
 
@@ -328,7 +338,7 @@ def test_hist_02_version_listing_and_read_only_version_url(hub, home) -> None:
     listing = api(hub, "GET", path).json()
     assert [v["version"] for v in listing["versions"]] == [1, 2]
     assert listing["versions"][0]["time"].endswith("Z")
-    token = hub.state.session_of(sid).page_token
+    token = hub.state.session_of(hub.pool_of(sid)).page_token
     url = f"{hub.frame_origin}/s/{token}/page.html"
     old = httpx.get(f"{url}?v=1")
     assert "one" in old.text and "/static/helper.js" in old.text

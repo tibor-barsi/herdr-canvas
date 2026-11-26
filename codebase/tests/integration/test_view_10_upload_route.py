@@ -181,14 +181,16 @@ def test_view_10_a_reserved_session_gets_its_folder(hub, owner) -> None:  # noqa
     assert not folder.exists()
     answer = upload(hub, owner, "first.png", session="rsv")
     assert answer.status_code == 200, answer.text
-    assert (folder / "first.png").read_bytes() == PNG
-    listed = httpx.get(f"{hub.base_url}/api/sessions/rsv", headers=hub.key_headers)
+    pool = hub.pool_of("rsv")  # the upload is a page of the project's pool
+    assert pool != "rsv"
+    assert (hub.state.session_of(pool).folder / "first.png").read_bytes() == PNG
+    listed = httpx.get(f"{hub.base_url}/api/sessions/{pool}", headers=hub.key_headers)
     assert listed.json()["pages"] == ["first.png"]
 
 
 def test_view_10_the_session_page_serves_the_stored_file(hub, owner, folder) -> None:  # noqa: ANN001
     upload(hub, owner, "p.png")
-    token = hub.state.session_of("a").page_token
+    token = hub.state.session_of(hub.pool_of("a")).page_token
     served = httpx.get(f"{hub.frame_origin}/s/{token}/p.png")
     assert served.content == PNG
 

@@ -365,7 +365,8 @@ def test_fb_06_session_list_reports_listening(hub, watches) -> None:
 
     def listing() -> dict[str, bool]:
         answer = httpx.get(f"{hub.base_url}/api/sessions", headers=hub.key_headers)
-        return {s["id"]: s["listening"] for s in answer.json()}
+        listed = [s for s in answer.json() if not s["id"].startswith("project-")]
+        return {s["id"]: s["listening"] for s in listed}  # without the pool, A-1022
 
     assert listing()["a"] is False
     watch = watches("a")

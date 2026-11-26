@@ -12,10 +12,10 @@ import httpx
 import pytest
 
 from agent_canvas.hub.headless import HeadlessRenderer
-from helpers import decode_png
+from helpers import decode_png, own_draft
 
 from .conftest import _launch_env
-from .support import SCROLL_PAGE, block, call, owner_field
+from .support import SCROLL_PAGE, block, call, card_events, owner_field
 from .test_heavy_blocks import GREEN, plot_config
 
 pytestmark = pytest.mark.browser
@@ -149,17 +149,17 @@ def test_look_03_a_look_changes_nothing_the_owner_could_notice(owner, studio) ->
     owner.page.focus("#owner-field")
     before = snapshot(owner)
     assert before["active"] == beta and before["focused"] == "owner-field"
-    events = owner.hub.on_loop(lambda: owner.hub.state.events.all(alpha))
+    events = card_events(owner.hub, alpha)
     result = look(owner, alpha, width=500, height=300)
     assert result["source"] == "window", result
     after = snapshot(owner)
     assert after == before
     assert studio.frame.evaluate("window.scrollY") == 340
     assert owner.page.input_value("#owner-field") == "half written thought"
-    assert owner.hub.on_loop(lambda: owner.hub.state.events.all(alpha)) == events
+    assert card_events(owner.hub, alpha) == events
     # the look's hidden frame is gone; the two pages keep their frames (SES-15)
     assert owner.page.locator("iframe").count() == before["iframes"]
-    assert owner.hub.on_loop(lambda: owner.hub.state.events.all(beta)) == []
+    assert card_events(owner.hub, beta) == []
 
 
 FOCUS_THIEF = (
@@ -206,7 +206,7 @@ def test_draft_02_the_window_never_shows_a_draft_but_a_look_can(owner, make) -> 
     made = make(LOOK_PAGE)
     owner.frame.evaluate("window.__marker = 'same document'")
     pills = owner.page.locator(".tab .pill.updated").count()
-    draft = made.folder / "page.draft.html"
+    draft = made.folder / own_draft(made.sid)
     draft.write_text(LOOK_PAGE.replace("#2a9d8f", "#e5484d"))
     owner.page.wait_for_timeout(900)
     draft.write_text(LOOK_PAGE.replace("#2a9d8f", "#e5484d") + "<!-- again -->")
@@ -394,7 +394,8 @@ def test_look_05_a_draft_section_below_the_first_screen_is_not_blank(
     owner, make, headless
 ) -> None:  # noqa: ANN001
     """The same for a NAME.draft.html page (#52)."""
-    made = make("<p>published</p>", files={"page.draft.html": LOW_PAGE})
+    made = make("<p>published</p>")
+    (made.folder / own_draft(made.sid)).write_text(LOW_PAGE)
     result = look(
         owner, made.sid, width=400, height=500, draft=True, section="spectrum"
     )

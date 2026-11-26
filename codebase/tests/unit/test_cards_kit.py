@@ -61,14 +61,14 @@ def test_card_04_template_is_listed_and_uses_the_blocks(tmp_path: Path) -> None:
 def test_card_04_assets_are_written_when_missing_and_never_replaced(
     tmp_path: Path,
 ) -> None:
-    write_template(tmp_path, "c.html", "cards")
-    html = (tmp_path / "c.html").read_text()
+    write_template(tmp_path, "c.abcd1234.draft.html", "cards")
+    html = (tmp_path / "c.abcd1234.draft.html").read_text()
     sources = set(re.findall(r'"src":\s*"([^"]+)"', html))
     assert any(s.endswith(".png") for s in sources) and "part.stl" in sources
     for source in sources:
         assert (tmp_path / source).is_file(), source
     (tmp_path / "part.stl").write_text("solid mine")
-    write_template(tmp_path, "c.html", "cards", force=True)
+    write_template(tmp_path, "c.abcd1234.draft.html", "cards", force=True)
     assert (tmp_path / "part.stl").read_text() == "solid mine"
 
 

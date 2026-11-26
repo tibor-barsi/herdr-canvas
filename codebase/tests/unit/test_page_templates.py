@@ -57,14 +57,20 @@ def test_kit_02_templates_use_the_blocks_that_fit() -> None:
     assert "canvas-scene" in texts["geometry"]
 
 
-def test_kit_03_refuses_to_overwrite_unless_forced(tmp_path: Path) -> None:
+def test_kit_03_refuses_to_overwrite_a_page_even_forced_but_a_draft_unless_forced(
+    tmp_path: Path,
+) -> None:
     target = write_template(tmp_path, "mine.html", "compare")
     target.write_text("owner's edit")
-    with pytest.raises(TemplateError, match="already exists"):
-        write_template(tmp_path, "mine.html", "results")
+    for force in (False, True):
+        with pytest.raises(TemplateError, match="already exists"):
+            write_template(tmp_path, "mine.html", "results", force=force)
     assert target.read_text() == "owner's edit"
-    write_template(tmp_path, "mine.html", "results", force=True)
-    assert "canvas-plot" in target.read_text()
+    draft = write_template(tmp_path, "mine.abcd1234.draft.html", "compare")
+    with pytest.raises(TemplateError, match="already exists"):
+        write_template(tmp_path, draft.name, "results")
+    write_template(tmp_path, draft.name, "results", force=True)
+    assert "canvas-plot" in draft.read_text()
 
 
 def test_kit_03_unknown_template_is_an_error(tmp_path: Path) -> None:
@@ -76,10 +82,10 @@ def test_kit_03_unknown_template_is_an_error(tmp_path: Path) -> None:
 def test_kit_03_geometry_adds_a_sample_model_without_replacing_yours(
     tmp_path: Path,
 ) -> None:
-    write_template(tmp_path, "g.html", "geometry")
+    write_template(tmp_path, "g.abcd1234.draft.html", "geometry")
     assert (tmp_path / "part.stl").read_text().startswith("solid")
     (tmp_path / "part.stl").write_text("solid mine")
-    write_template(tmp_path, "g.html", "geometry", force=True)
+    write_template(tmp_path, "g.abcd1234.draft.html", "geometry", force=True)
     assert (tmp_path / "part.stl").read_text() == "solid mine"
 
 

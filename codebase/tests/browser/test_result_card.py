@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+from .support import card_events
 from .test_ask_cards import call, make  # noqa: F401
 from .test_plan_approval_card import head_pixels, light
 
@@ -42,7 +43,7 @@ def card_of(owner):
 
 
 def decisions(owner, sid: str) -> list[dict]:
-    return [e for e in owner.hub.state.events.all(sid) if e["kind"] == "decision"]
+    return [e for e in card_events(owner.hub, sid) if e["kind"] == "decision"]
 
 
 # ---- RES-02 ------------------------------------------------------------------------
@@ -53,7 +54,7 @@ def test_res_02_the_card_shows_summary_chips_decision_and_dismiss_above_the_page
     make,
 ) -> None:
     sid = make()
-    folder = owner.hub.state.session_of(sid).folder
+    folder = owner.hub.state.session_of(owner.hub.pool_of(sid)).folder
     decision(owner, sid, files=[str(folder / "page.html"), "/abs/out.csv"])
     card = card_of(owner)
     card.wait_for()
@@ -119,7 +120,7 @@ def test_res_02_dismiss_closes_the_card_and_creates_no_event(owner, make) -> Non
     card.wait_for()
     card.get_by_role("button", name="Dismiss", exact=True).click()
     card.wait_for(state="detached")
-    assert owner.hub.state.events.all(sid) == []
+    assert card_events(owner.hub, sid) == []
 
 
 def test_res_02_a_decided_card_closes_with_its_cross_and_a_replacement_comes_back(
@@ -149,7 +150,7 @@ def test_res_02_a_chip_of_a_page_opens_that_page_and_another_chip_copies_its_pat
     make,
 ) -> None:
     sid = make("<p>first</p>")
-    folder = owner.hub.state.session_of(sid).folder
+    folder = owner.hub.state.session_of(owner.hub.pool_of(sid)).folder
     (folder / "second.html").write_text("<title>s</title><p>second</p>")
     call(
         owner,

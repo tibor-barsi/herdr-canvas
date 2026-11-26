@@ -47,3 +47,23 @@ def test_cli_07_a_timeout_above_the_limit_is_cut_to_the_limit(
     )
     assert main(["watch", "--session", "a", "--timeout", str(asked)]) == 0
     assert seen == [used]
+
+
+def test_cli_08_a_taken_port_fails_plainly_without_a_traceback(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path
+) -> None:  # noqa: ANN001
+    import errno
+    import types
+
+    import agent_canvas.config as config
+    import agent_canvas.hub.app as app
+    import agent_canvas.paths as paths
+
+    def taken(*_: object) -> None:
+        raise OSError(errno.EADDRINUSE, "Address already in use")
+
+    monkeypatch.setattr(config, "load_config", lambda: types.SimpleNamespace(port=1))
+    monkeypatch.setattr(paths, "state_dir", lambda: tmp_path)
+    monkeypatch.setattr(app, "run_hub", taken)
+    assert main(["hub"]) == 1
+    assert "port is taken" in capsys.readouterr().err

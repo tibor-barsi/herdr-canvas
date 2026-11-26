@@ -179,7 +179,7 @@ const commentOutbox = window.createOutbox({
 
 // ANS-02: stored answers go to the frame, the frame's answers and ticks to the hub.
 const answerRelay = window.createAnswerRelay({
-  activeTab, postToFrame, notify: showNotice,
+  activeTab, poolOf, postToFrame, notify: showNotice,
   isOldVersion: () => viewing !== null,
   requestItems: (session, page) => sendToHub({type: "answers-get", session, page}),
   submit: submitAnswer, showCopied, copyFailed: showCopyFailed,
@@ -938,6 +938,11 @@ const WINDOW_ACTIONS = {
   "pane.prev": () => view.goPane(null, -1),
   "page.next": () => view.goPage(1),
   "page.prev": () => view.goPage(-1),
+  "page.pin": () => {
+    const shown = view.shownPage();
+    if (!shown) return false;
+    api("POST", "/api/home/pages", {session: shown.session, page: shown.page, pin: !shown.pinned});
+  },
   "file.open": () => window.fileUi.pick(),
   "notice.reload": () => pressVisible("notice", "notice-reload"),
   "update.reload": () => pressVisible("update-bar", "update-reload"),
@@ -1203,6 +1208,12 @@ async function copyPath(path) {
   }
 }
 
+// POOL-03: the sessions of a project share one pool; its pages, comments and answers are the
+// pool's, so a message names the pool or any card of it and counts for every card of the pool.
+function poolOf(id) {
+  return tabs.find((t) => t.id === id)?.pool || id;
+}
+
 // Show the active tab's open asks above the page (cards.js draws them).
 function renderAsks() {
   if (window.shellCards) {
@@ -1232,7 +1243,7 @@ function onAskOpened(message) {
 function onFileChanged(message) {
   if (typeof message.path !== "string") return;
   for (const record of liveFrames.values()) {
-    if (record.session !== message.session || record.old) continue;
+    if (poolOf(record.session) !== poolOf(message.session) || record.old) continue;
     record.element.contentWindow.postMessage({type: "file-changed", path: message.path}, "*");
   }
 }
@@ -1459,14 +1470,15 @@ function postToFrame(message) {
 }
 
 // An agent's reply or done in a tab that is not shown gives it the "updated" badge
-// (RPL-04): some comment is unread now that was not before.
+// (RPL-04): some comment is unread now that was not before. In a pool, only the tabs
+// that list the page get it.
 function badgeInactiveTab(message, before) {
-  const tab = tabs.find((t) => t.id === message.session);
-  if (!tab || tab.id === activeId) return;
   const wasUnread = new Set(before ? before.comments.filter((c) => c.unread).map((c) => c.n) : []);
   if (!message.comments.some((c) => c.unread && !wasUnread.has(c.n))) return;
-  markNews(tab, false);
-  renderTabs();
+  const inactive = tabs.filter((t) => t.id !== activeId && poolOf(t.id) === poolOf(message.session)
+    && (t.id === message.session || (t.pages || []).includes(message.page)));
+  for (const tab of inactive) markNews(tab, false);
+  if (inactive.length) renderTabs();
 }
 
 // The tabs' side of a page's comments from the hub: the news count and the send button.
@@ -1482,7 +1494,7 @@ const {
   commentsOnReady, onCommentSelection, onCommentPicture, onCommentMarker, onCommentLost,
   commentModeOn, updateCommentUi, commentPanelKey,
 } = window.createCommentFeature({
-  main, activeTab, viewing: () => viewing, isOffline: () => hubOffline, commentOutbox,
+  main, activeTab, poolOf, viewing: () => viewing, isOffline: () => hubOffline, commentOutbox,
   postToFrame, sendToHub, api, showNotice, drop,
   updateBar: () => window.drawUi.updateBar(), commentsArrived,
 });

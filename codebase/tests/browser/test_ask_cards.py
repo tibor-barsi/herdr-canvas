@@ -16,6 +16,8 @@ from pathlib import Path
 import httpx
 import pytest
 
+from .support import card_events
+
 pytestmark = pytest.mark.browser
 
 BLOCK_PAGE = """<!doctype html><title>t</title>
@@ -95,7 +97,9 @@ def make(owner, tmp_path: Path):  # noqa: ANN001, ANN201
         directory.mkdir(exist_ok=True)
         body = {"project": str(directory), "agent": "claude", "title": name}
         sid = call(owner, "POST", "/api/sessions", json=body)["session"]
-        (owner.hub.state.session_of(sid).folder / "page.html").write_text(html)
+        (
+            owner.hub.state.session_of(owner.hub.pool_of(sid)).folder / "page.html"
+        ).write_text(html)
         call(owner, "POST", f"/api/sessions/{sid}/show",
              json={"project": str(directory), "name": "page.html"})  # fmt: skip
         # A later session does not take over the window: visit it as the owner would.
@@ -208,7 +212,7 @@ def test_cli_05_a_timed_out_card_stays_and_a_late_answer_is_queued(owner, make) 
     )
     card.get_by_role("button", name="B").click()
     owner.page.wait_for_function("document.querySelectorAll('.ask-card').length === 0")
-    events = owner.hub.on_loop(lambda: owner.hub.state.events.all(sid))
+    events = card_events(owner.hub, sid)
     [answer] = [e for e in events if e["kind"] == "answer"]
     assert answer["value"] == ["B"] and answer["delivery"] == "now"
     assert answer["state"] == "queued"
@@ -255,7 +259,7 @@ def test_cli_06_the_highlight_survives_a_page_update(owner, make) -> None:  # no
         "document.querySelector('[data-canvas-id=design]')"
         ".hasAttribute('data-canvas-waiting')"
     )
-    folder = owner.hub.state.session_of(sid).folder
+    folder = owner.hub.state.session_of(owner.hub.pool_of(sid)).folder
     (folder / "page.html").write_text(BLOCK_PAGE.replace("Designs", "Designs v2"))
     owner.frame.wait_for_function("document.body.innerText.includes('Designs v2')")
     assert (
@@ -280,7 +284,7 @@ def test_cli_06_block_event_helper_records_a_choice_action_with_its_event(
         f"(window.__drafts['{sid}'] || {{actions: []}}).actions.some("
         "(a) => a.kind === 'choice' && a.event)"
     )
-    [event] = owner.hub.on_loop(lambda: owner.hub.state.events.all(sid))
+    [event] = card_events(owner.hub, sid)
     assert event["kind"] == "choice" and event["value"] == ["b"]
     assert event["target"]["canvas_id"] == "design" and event["delivery"] == "now"
 

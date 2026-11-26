@@ -37,6 +37,7 @@ description = "Herdr's navigation keys plus the canvas's own keys"
 "pane.next" = ["]"]
 "page.prev" = ["Alt+,"]
 "page.next" = ["Alt+."]
+"page.pin" = ["Alt+p"]
 "sidebar.toggle" = ["Ctrl+B", "b", "B"]
 "help.open" = ["?", "Ctrl+?"]
 "send.now" = ["Ctrl+Enter"]

@@ -165,43 +165,45 @@ def test_cli_02_sec_08_show_rejects_page_outside_folder(env, tmp_path: Path) -> 
 
 def test_cli_02_show_missing_file_names_the_folder(env) -> None:
     registry, _, project, _, _ = env
-    meta = registry.create("a", str(project), "agent", None)
+    registry.create("a", str(project), "agent", None)
     with pytest.raises(RegistryError) as excinfo:
         registry.show("a", "nope.html", None, None)
-    assert str(registry.folder_of(meta)) in str(excinfo.value)
+    pool = registry.pool_session(str(project))  # POOL-01: pages are the pool's
+    assert str(registry.folder_of(pool)) in str(excinfo.value)
 
 
 def test_cli_02_show_records_page_and_active_page(env) -> None:
     registry, state, project, _, _ = env
-    meta = registry.create("a", str(project), "agent", None)
-    (registry.folder_of(meta) / "page.html").write_text("<p>x</p>")
+    registry.create("a", str(project), "agent", None)
+    pool = registry.pool_session(str(project))  # POOL-01: show answers the pool
+    (registry.folder_of(pool) / "page.html").write_text("<p>x</p>")
     meta, page, path = registry.show("a", None, "T", None)
     assert page == "page.html" and path.name == "page.html"
-    assert (meta["pages"], meta["active_page"], meta["title"]) == (
-        ["page.html"], "page.html", "T"
-    )  # fmt: skip
+    assert (meta["pages"], meta["active_page"]) == (["page.html"], "page.html")
+    assert registry.get("a").title == "T"
     assert state.active_url.endswith("/page.html")
 
 
 def test_cli_16_show_copy_places_file_under_base_name(env, tmp_path: Path) -> None:
     registry, _, project, _, _ = env
-    meta = registry.create("a", str(project), "agent", None)
+    registry.create("a", str(project), "agent", None)
     source = tmp_path / "ext" / "design.html"
     source.parent.mkdir()
     source.write_text("<p>hi</p>")
-    _, page, path = registry.show("a", None, None, str(source))
-    assert page == "design.html"
+    meta, page, path = registry.show("a", None, None, str(source))
+    assert page == "design.html"  # POOL-01: copied into the pool
     assert (registry.folder_of(meta) / "design.html").read_text() == "<p>hi</p>"
 
 
 def test_ses_01_hidden_flag_cleared_by_show(env) -> None:
     registry, _, project, _, _ = env
-    meta = registry.create("a", str(project), "agent", None)
-    (registry.folder_of(meta) / "page.html").write_text("x")
+    registry.create("a", str(project), "agent", None)
+    pool = registry.pool_session(str(project))  # POOL-01
+    (registry.folder_of(pool) / "page.html").write_text("x")
     registry.set_hidden("a", True)
     assert registry.get("a").hidden is True
-    meta, _, _ = registry.show("a", None, None, None)
-    assert meta["hidden"] is False
+    registry.show("a", None, None, None)
+    assert registry.get("a").hidden is False
 
 
 def test_session_list_filters_ended_and_project(env, tmp_path: Path) -> None:

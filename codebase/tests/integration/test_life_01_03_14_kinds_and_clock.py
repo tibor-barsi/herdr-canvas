@@ -179,7 +179,8 @@ def test_life_03_pages_90_days_old_are_not_expired_at_the_first_start(
         json.dumps({**session, "pages": ["old.html"], "active_page": "old.html"})
     )
     registry = hub.app.state.services.registry
-    hub.on_loop(lambda: registry.note_pages("a"))  # what the hub does at its start
+    pool = registry.pool_of("a")  # the folder is the pool's (POOL-01)
+    hub.on_loop(lambda: registry.note_pages(pool))  # what the hub does at its start
     entry = page_meta(folder)["old.html"]
     changed = (folder / "old.html").stat().st_mtime
     assert not is_expired(entry, changed, clock.now())

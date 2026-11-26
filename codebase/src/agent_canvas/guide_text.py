@@ -66,18 +66,6 @@ def blocks_text() -> str:
     return _read("blocks.md").strip() + "\n"
 
 
-def project_pages_text() -> str:
-    """
-    Return the topic printed by ``agent-canvas guide project-pages`` (PROJ-14).
-
-    Returns
-    -------
-    str
-        Markdown ending with one newline.
-    """
-    return _read("project-pages.md").strip() + "\n"
-
-
 def skill_text() -> str:
     """
     Return the content of ``plugin/skills/agent-canvas/SKILL.md``.

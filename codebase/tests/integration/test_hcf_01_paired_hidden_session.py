@@ -34,7 +34,7 @@ def snapshot(session: str | None) -> dict:
 
 
 def next_tabs(shell: FakeShell, wait: float = 5) -> list[str]:
-    """Return the session ids of the next ``tabs`` message."""
+    """Return the session ids of the next ``tabs`` message, the pool's tab left out."""
     deadline = time.monotonic() + wait
     while (left := deadline - time.monotonic()) > 0:
         try:
@@ -42,7 +42,7 @@ def next_tabs(shell: FakeShell, wait: float = 5) -> list[str]:
         except queue.Empty:
             break
         if message["type"] == "tabs":
-            return [t["id"] for t in message["sessions"]]
+            return [t["id"] for t in message["sessions"] if t["agent"] != "project"]
     raise AssertionError("no tabs message")
 
 
@@ -60,7 +60,8 @@ def test_hcf_01_a_hidden_session_in_a_pane_gets_its_tab(hub, home) -> None:  # n
         herdr = hub.app.state.services.herdr_app
         herdr.snapshot = lambda: snapshot(sid)
         assert next_tabs(shell) == [sid]
-        assert hub.state.tabs_message()["sessions"][0]["pages"] == ["page.html"]
+        [card] = [t for t in hub.state.tabs_message()["sessions"] if t["id"] == sid]
+        assert card["pages"] == ["page.html"]
         herdr.snapshot = lambda: snapshot(None)
         assert next_tabs(shell) == []
     finally:

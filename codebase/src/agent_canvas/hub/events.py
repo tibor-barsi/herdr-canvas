@@ -64,11 +64,6 @@ def ticks_not_from_owner(steps: list[int]) -> str:
     )
 
 
-def _from_project(event: dict[str, Any]) -> dict[str, Any]:
-    """Mark an event handed out from the project's log (PROJ-11)."""
-    return {**event, "project_page": True}
-
-
 def new_event_id() -> str:
     """Return a new random event id (``evt_`` and 16 hex digits)."""
     return f"evt_{secrets.token_hex(8)}"
@@ -108,7 +103,8 @@ class EventLog:
         self.after_append = after_append
         self._events: dict[str, dict[str, Any]] = {}
         self._read: dict[str, str] = {}  # event id -> time of its delivery
-        self._last_send: list[str] = []  # event ids of the newest send's parts
+        # event ids of the newest send's parts, per card (``for``; None: own sends)
+        self._last_send: dict[str | None, list[str]] = {}
         self._next_seq = 1
         self._load()
 
@@ -124,6 +120,7 @@ class EventLog:
         value: Any = None,
         fields: dict[str, Any] | None = None,
         not_from_owner: bool = False,
+        card: str | None = None,
     ) -> dict[str, Any]:
         """
         Create an event, append it to the log and return it (FB-01).
@@ -146,6 +143,8 @@ class EventLog:
         not_from_owner : bool, optional
             The window relayed it with no action of the owner (SEC-09): the
             event gets ``not_from_owner``, the text that says so.
+        card : str | None, optional
+            The card a pool event came from: the event gets ``for`` (POOL-05).
 
         Returns
         -------
@@ -182,6 +181,8 @@ class EventLog:
             event["result"] = (fields or {}).get("result")
         if not_from_owner:
             event["not_from_owner"] = NOT_FROM_OWNER
+        if card:
+            event["for"] = card
         self._append({"record": "event", **event})
         self._next_seq += 1
         self._events[event["id"]] = event
@@ -199,9 +200,15 @@ class EventLog:
         """Return copies of all events in ``seq`` order."""
         return [dict(e) for e in self._events.values()]
 
-    def latest_send(self) -> dict[str, Any] | None:
+    def latest_send(self, card: str | None = None) -> dict[str, Any] | None:
         """
         Describe the newest send for the window's receipt line (FB-10).
+
+        Parameters
+        ----------
+        card : str | None, optional
+            Only the sends of this card in a pool's log (POOL-05); default the
+            sends without a card.
 
         Returns
         -------
@@ -210,10 +217,11 @@ class EventLog:
             last part was delivered (None while a part is queued); None
             without any send.
         """
-        if not self._last_send:
+        parts = self._last_send.get(card)
+        if not parts:
             return None
-        first = self._events[self._last_send[0]]
-        reads = [self._read.get(event_id) for event_id in self._last_send]
+        first = self._events[parts[0]]
+        reads = [self._read.get(event_id) for event_id in parts]
         return {
             "time": first.get("time"),
             "delivery": first.get("delivery"),
@@ -231,9 +239,12 @@ class EventLog:
             if e["state"] == "queued" and e["delivery"] in wanted
         ]
 
-    def mark_delivered(self, event_id: str, via: str) -> bool:
+    def mark_delivered(self, event_id: str, via: str, taker: str | None = None) -> bool:
         """
         Record that an event was delivered.
+
+        ``taker`` is the session that took a pool event from the inbox; it may
+        then answer the event's comments (A-1140).
 
         Returns
         -------
@@ -257,7 +268,7 @@ class EventLog:
         self._read[event_id] = record["time"]
         if event.get("comments") and event.get("page"):
             numbers = [c["n"] for c in event["comments"]]
-            comments.stamp_seen(self.path.parent, event["page"], numbers)
+            comments.stamp_seen(self.path.parent, event["page"], numbers, taker)
             if self.on_seen is not None:
                 self.on_seen(event["page"])
         if self.on_delivered is not None:
@@ -274,7 +285,7 @@ class EventLog:
         next_seq = self._next_seq
         self._events.clear()
         self._read.clear()
-        self._last_send = []
+        self._last_send = {}
         self._next_seq = 1
         self._load()
         self._next_seq = max(self._next_seq, next_seq)
@@ -313,12 +324,13 @@ class EventLog:
         """Keep the parts of the newest send; a send without ``send_id`` is one part."""
         if event.get("kind") != "send":
             return
-        last = self._events[self._last_send[0]] if self._last_send else {}
+        parts = self._last_send.setdefault(event.get("for"), [])
+        last = self._events[parts[0]] if parts else {}
         send_id = event.get("send_id")
         if send_id is not None and last.get("send_id") == send_id:
-            self._last_send.append(event["id"])
+            parts.append(event["id"])
         else:
-            self._last_send = [event["id"]]
+            parts[:] = [event["id"]]
 
 
 class Listener:
@@ -361,15 +373,14 @@ class Listener:
         Wait for the next event that is still queued.
 
         Events delivered by another path while they waited here (``pending``,
-        another listener's acknowledgement) are skipped. An event of the
-        project's log carries ``project_page`` (PROJ-11).
+        another listener's acknowledgement) are skipped.
         """
         while True:
             event = await self.queue.get()
             log = self._offered[event["id"]]
             current = log.get(event["id"])
             if current is not None and current["state"] == "queued":
-                return current if log is self._log else _from_project(current)
+                return current
 
 
 class EventService:
@@ -394,11 +405,14 @@ class EventService:
     on_created : Callable[[str, dict[str, Any]], None] | None, optional
         Called with ``(session_id, event)`` after an event is appended (LIFE-02).
     project_of : Callable[[str], str | None] | None, optional
-        Returns the registered project session of a session id, or None
-        (PROJ-07).
+        Returns the registered pool of a session id, or None (POOL-05).
     receiver_of : Callable[[str, dict[str, Any]], str | None] | None, optional
-        Called with ``(project_session_id, event)``; returns the session that
-        alone may take the event now, or None for the project's inbox (PROJ-07).
+        Called with ``(pool_id, event)``; returns the session that alone may
+        take the event now, or None for the pool's inbox (POOL-05).
+    touched : Callable[[str, str | None, str], bool] | None, optional
+        Called with ``(pool_id, page, session_id)``; tells whether the session
+        touched the page (any pool page for None) and so may take its inbox
+        items (POOL-05, A-1020).
     """
 
     def __init__(
@@ -410,6 +424,7 @@ class EventService:
         on_created: Callable[[str, dict[str, Any]], None] | None = None,
         project_of: Callable[[str], str | None] | None = None,
         receiver_of: Callable[[str, dict[str, Any]], str | None] | None = None,
+        touched: Callable[[str, str | None, str], bool] | None = None,
     ) -> None:
         self._state = state
         self._on_created = on_created
@@ -418,6 +433,7 @@ class EventService:
         self._on_delivered = on_delivered
         self._project_of = project_of or (lambda session_id: None)
         self._receiver_of = receiver_of or (lambda project, event: None)
+        self._touched = touched or (lambda project, page, session_id: True)
         self._logs: dict[str, EventLog] = {}
         self._listeners: dict[str, list[Listener]] = {}
 
@@ -440,14 +456,29 @@ class EventService:
         """
         Return the newest send of a session and its read time (FB-10).
 
-        A session without ``events.jsonl`` has no send, and its log is not read
-        (and kept) before it has one.
+        A card's sends about pool pages are in the pool's log (POOL-05); the
+        newer of those and the session's own sends counts. A session without
+        ``events.jsonl`` has no send, and its log is not read (and kept)
+        before it has one.
         """
-        if session_id not in self._logs:
-            folder = self._state.session_of(session_id).folder
+        pool = self._project_of(session_id)
+        found = [
+            send
+            for holder, card in ((session_id, None), (pool, session_id))
+            if holder and (send := self._latest_in(holder, card))
+        ]
+        return max(found, key=lambda send: send["time"], default=None)
+
+    def _latest_in(self, holder: str, card: str | None) -> dict[str, Any] | None:
+        if holder not in self._logs:
+            folder = self._state.session_of(holder).folder
             if not (folder / EVENTS_FILE).is_file():
                 return None
-        return self.log(session_id).latest_send()
+        return self.log(holder).latest_send(card)
+
+    def pool_of(self, session_id: str) -> str | None:
+        """Return the registered pool of a session, or None (POOL-01)."""
+        return self._project_of(session_id)
 
     def drop(self, session_id: str) -> None:
         """Forget the log of a session whose folder was deleted."""
@@ -479,7 +510,7 @@ class EventService:
         if self._on_created is not None:
             self._on_created(session_id, event)
         if event["delivery"] == "now":
-            # A project event goes only to the watch of its running updater (PROJ-10).
+            # A pool event goes only to the watch of its card's live session (POOL-05).
             taker = (
                 self._receiver_of(session_id, event)
                 if is_project_id(session_id)
@@ -489,6 +520,33 @@ class EventService:
                 if listener.kind == "watch":
                     listener.offer(event, log)
         return event
+
+    def create_for(self, card: str, kind: str, **fields: Any) -> dict[str, Any]:
+        """
+        Create an event a card caused (POOL-05).
+
+        One about a page of the card's pool goes to the pool's log with
+        ``for`` naming the card; any other one, and one an ``ask --block``
+        waits for (delivery ``ask``), stays in the card's own log.
+
+        Parameters
+        ----------
+        card : str
+            The card's session.
+        kind : str
+            Event kind.
+        **fields
+            Arguments of :meth:`EventLog.create`.
+
+        Returns
+        -------
+        dict[str, Any]
+            The new event.
+        """
+        pool = self._project_of(card)
+        if pool is None or not fields.get("page") or fields.get("delivery") == "ask":
+            return self.create(card, kind, **fields)
+        return self.create(pool, kind, card=card, **fields)
 
     def get(self, session_id: str, event_id: str) -> dict[str, Any] | None:
         """Return one event of a session, or None."""
@@ -507,7 +565,7 @@ class EventService:
         Without ``peek`` they become delivered via ``via`` (``pending`` for the
         command, ``hook`` for the prompt hook, ``mcp`` for the MCP tool) in the
         same synchronous step, so no watch can also take them afterwards.
-        The session's share of its project's events follows (PROJ-07); if the
+        The session's share of its pool's events follows (POOL-05); if the
         project's log cannot be read, they wait and the own events still go.
         """
         log = self.log(session_id)
@@ -527,25 +585,29 @@ class EventService:
         self, session_id: str, peek: bool, via: str = "pending"
     ) -> list[dict[str, Any]]:
         """
-        Return the queued project events that ``session_id`` may take (PROJ-07).
+        Return the queued pool events that ``session_id`` may take (POOL-05).
 
-        Those whose receiver is the session or the inbox; without ``peek`` they
-        become delivered in the project's log in the same synchronous step, so
-        each is handed out once (PROJ-08). The session itself needs no log or
-        folder (a reserved id, PROJ-09).
+        Those whose receiver is the session, and inbox items of a page the
+        session touched; without ``peek`` they become delivered in the pool's
+        log in the same synchronous step, so each is handed out once (PROJ-08).
+        The session itself needs no log or folder (a reserved id).
         """
         project = self._project_of(session_id)
         if project is None:
             return []
         log = self.log(project)
         events = [
-            _from_project(event)
+            event
             for event in log.queued()
-            if self._receiver_of(project, event) in (session_id, None)
+            if (receiver := self._receiver_of(project, event)) == session_id
+            or (
+                receiver is None
+                and self._touched(project, event.get("page"), session_id)
+            )
         ]
         if not peek:
             for event in events:
-                log.mark_delivered(event["id"], via)
+                log.mark_delivered(event["id"], via, session_id)
                 event["state"] = "delivered"
         return events
 
@@ -554,7 +616,8 @@ class EventService:
         Acknowledge delivery of an event by a listener (CLI-08).
 
         An event of the project's log offered to one of the session's
-        listeners is marked in that log (PROJ-10).
+        listeners, or one there for the session's card, is marked in that
+        log (POOL-05).
 
         Returns
         -------
@@ -564,6 +627,9 @@ class EventService:
         """
         if self.log(session_id).mark_delivered(event_id, via):
             return True
+        pool = self._project_of(session_id)
+        if pool and (self.log(pool).get(event_id) or {}).get("for") == session_id:
+            return self.log(pool).mark_delivered(event_id, via)
         for listener in self._listeners.get(session_id, []):
             log = listener.source(event_id)
             if log is not None:
@@ -584,7 +650,7 @@ class EventService:
         watching = self.watching(session_id)
         members = self._listeners.setdefault(session_id, [])
         members.append(listener)
-        # After joining: a session with a watch counts as running (PROJ-10).
+        # After joining: a session with a watch counts as alive (POOL-05).
         project = self._project_of(session_id) if kind == "watch" else None
         for event in self.log(project).queued(("now",)) if project else []:
             if self._receiver_of(project, event) == session_id:

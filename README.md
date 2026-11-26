@@ -7,6 +7,9 @@ produce, such as plots, option comparisons and run status, in a window beside th
 [Herdr](https://github.com/herdrdev/herdr) desktop app, and sends your answers
 back to the agent: clicks, drawings, comments and question cards.
 
+- A project's pages are one set that all its sessions share (the pool, in the
+  project's `.agent-canvas/` folder), so a new session finds the pages already
+  there. Feedback about a page goes to the session that owns that card.
 - The sidebar and the tabs mirror Herdr's spaces, tabs and split panes, so each
   agent's canvas page sits next to the pane it belongs to.
 - Everything can be done from the keyboard, including commenting on a page. The

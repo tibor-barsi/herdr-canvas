@@ -100,6 +100,11 @@ class Credentials:
         self._lock = threading.Lock()
 
     @property
+    def pool_tag(self) -> str:
+        """The TAG of this hub's pools: 8 hex of SHA-256 over the key (A-1003)."""
+        return hashlib.sha256(f"{self._key}\npool-tag-v1".encode()).hexdigest()[:8]
+
+    @property
     def cookie_value(self) -> str:
         """Value of the owner cookie."""
         return self._cookie.hexdigest()

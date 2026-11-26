@@ -72,7 +72,7 @@ INSTRUCTIONS = {
     1: ["mentions the canvas", "plot, picture or document says more than text",
         "questions, decisions, approvals", "One-sentence answers",
         "stay in the terminal"],  # the core (AGI-09) says when to use it
-    2: ["agent-canvas session path", "<project>/.agent-canvas/<session>/",
+    2: ["agent-canvas session path", "<project>/.agent-canvas/", "page folder",
         "an `id`", "blocks", "never load anything from the internet"],
     3: ["SessionStart context", "session id as `session`", "AGENT_CANVAS_SESSION",
         "session_start"],

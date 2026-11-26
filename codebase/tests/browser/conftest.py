@@ -209,8 +209,8 @@ def make(owner, tmp_path: Path):  # noqa: ANN001, ANN201
         directory = tmp_path / name
         directory.mkdir(exist_ok=True)
         body = {"project": str(directory), "agent": "claude", "title": name}
-        sid = call(owner, "POST", "/api/sessions", json=body)["session"]
-        folder = owner.hub.state.session_of(sid).folder
+        started = call(owner, "POST", "/api/sessions", json=body)
+        sid, folder = started["session"], Path(started["folder"])  # the pool, POOL-01
         for filename, content in (files or {}).items():
             data = content.encode() if isinstance(content, str) else content
             (folder / filename).write_bytes(data)

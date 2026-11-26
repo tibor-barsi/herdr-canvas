@@ -161,7 +161,7 @@ def test_new_01_a_headless_show_and_look_never_count_as_seen(
         timeout=90,
     )
     assert looked.json()["source"] == "headless"
-    folder = hub.state.session_of("t1").folder
+    folder = hub.state.session_of(hub.pool_of("t1")).folder
     meta = json.loads((folder / "session.json").read_text())["page_meta"]["tall.html"]
     assert (meta["seen_version"], meta["seen_at"]) == (None, None)
 
@@ -266,7 +266,7 @@ def test_new_03_a_viewer_page_gets_the_line_and_no_signs(owner) -> None:  # noqa
     directory.mkdir()
     body = {"project": str(directory), "agent": "claude", "title": "v"}
     sid = call(owner, "POST", "/api/sessions", json=body)["session"]
-    folder = owner.hub.state.session_of(sid).folder
+    folder = owner.hub.state.session_of(owner.hub.pool_of(sid)).folder
     (folder / "notes.md").write_text("# One\n")
     owner.visit(sid)
     call(owner, "POST", f"/api/sessions/{sid}/show", json={"name": "notes.md"})

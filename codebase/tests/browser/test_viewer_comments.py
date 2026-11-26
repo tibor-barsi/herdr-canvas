@@ -778,7 +778,11 @@ def test_view_14_a_picture_that_cannot_be_decoded_is_reported_to_the_hub(
 
     def reasons() -> dict:
         return studio.owner.hub.on_loop(
-            lambda: dict(state.page_status(sid, "bad.png").viewer_errors)
+            lambda: dict(
+                state.page_status(
+                    studio.owner.hub.pool_of(sid), "bad.png"
+                ).viewer_errors
+            )
         )
 
     for _ in range(100):

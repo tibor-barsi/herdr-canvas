@@ -28,7 +28,7 @@ def test_page_13_drawing_survives_an_early_show(owner, tmp_path, delay) -> None:
     directory.mkdir()
     body = {"project": str(directory), "agent": "claude", "title": "early"}
     sid = call(owner, "POST", "/api/sessions", json=body)["session"]
-    folder = owner.hub.state.session_of(sid).folder
+    folder = owner.hub.state.session_of(owner.hub.pool_of(sid)).folder
     owner.visit(sid)
     (folder / "page.html").write_text(PAGE)
     owner.page.wait_for_timeout(delay)

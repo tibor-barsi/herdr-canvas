@@ -33,7 +33,7 @@ their next send. Its submit button is not for decisions: it is not an answer
 card (`answers` does not list it); use `canvas-ask` for a decision.
 
 Config: `mode` (`single` or `multi`, default `single`), `options` (list of
-`{id, title, description?, image?}`; `image` is a file in the session folder),
+`{id, title, description?, image?}`; `image` is a file in the page folder),
 `submit?` (button label; without it there is no button).
 Produces: owner selects -> `select` action (value: list of option ids);
 presses submit -> `choice` event, `value` = list of option ids.
@@ -77,7 +77,7 @@ Example: `<canvas-progress data-canvas-id="job"><script type="application/json">
 Config: `value` (number), `max?` (default 1), `label?`, `status` (`running`,
 `done` or `failed`, default `running`), `detail?` (small text below).
 Rewrite the file to update it; the bar moves without flicker.
-Long jobs: `started?`, `eta?` (ISO times), `log?` (a file in the session folder,
+Long jobs: `started?`, `eta?` (ISO times), `log?` (a file in the page folder,
 never elsewhere; its last 5 lines show folded and refresh when it changes) and
 `stop?` (true: a Stop button while running; after "Stop the run?" and "Yes, stop"
 a `button` event `stop` arrives; stop the job and rewrite `status`).
@@ -86,7 +86,7 @@ a `button` event `stop` arrives; stop the job and rewrite `status`).
 
 Example: `<canvas-markdown data-canvas-id="notes"><script type="text/markdown">Energy $E=mc^2$ and a **list**.</script></canvas-markdown>`
 
-Config: `text` (markdown), or `src` (a `.md` file in the session folder), or a
+Config: `text` (markdown), or `src` (a `.md` file in the page folder), or a
 child `<script type="text/markdown">` with the markdown itself (no JSON needed).
 `$...$` and `$$...$$` are rendered as math (KaTeX); `$5` stays text.
 Display only.
@@ -96,7 +96,7 @@ Display only.
 Example: `<canvas-plot data-canvas-id="spectrum"><script type="application/json">{"data": [{"x": [1, 2, 3], "y": [2, 5, 3], "mode": "lines+markers"}], "layout": {"xaxis": {"title": {"text": "f (Hz)"}}}}</script></canvas-plot>`
 
 Config: a Plotly figure as `data` (list of traces), `layout?`, `config?`; or
-`src` (a JSON file in the session folder holding `{data, layout?, config?}`).
+`src` (a JSON file in the page folder holding `{data, layout?, config?}`).
 Axis titles are `{"text": "f (Hz)"}`: a plain string is ignored by this
 Plotly version. Without `layout.width` the plot fills the block's width. Rewriting the `src`
 file redraws the plot within a second, with no page reload. Plotly GL traces
@@ -117,7 +117,7 @@ uses the mode bar) -> `plot-select` action, value `{points, total}` with at most
 
 Example: `<canvas-image data-canvas-id="photo"><script type="application/json">{"src": "photo.png", "alt": "Test part"}</script></canvas-image>`
 
-Config: `src` (an image file in the session folder), `alt?`.
+Config: `src` (an image file in the page folder), `alt?`.
 The owner zooms with the wheel, pans by dragging and resets with a double
 click; the enlarge button (or Enter on the picture) opens it full-frame, Esc
 closes. Rewriting the file reloads it and keeps the zoom.
@@ -128,7 +128,7 @@ Produces: click -> `image-click` action, value `{x, y}` in image pixels
 
 Example: `<canvas-model data-canvas-id="part"><script type="application/json">{"src": "bracket.step", "units": "mm", "colour": "#2a9d8f"}</script></canvas-model>`
 
-Config: `src` (a `.stl`, `.step` or `.stp` file in the session folder),
+Config: `src` (a `.stl`, `.step` or `.stp` file in the page folder),
 `units?` (label shown with the size, no conversion), `colour?` (CSS hex colour;
 STEP colours are used without it), `height?` (px, default 320).
 The owner orbits, zooms and pans. A "Mark" toggle switches on mark mode: a
@@ -141,7 +141,7 @@ viewer, `label` the marker number).
 ## `canvas-scene`
 
 Example: `<canvas-scene data-canvas-id="asm"><script type="application/json">{"src": "asm.json"}</script></canvas-scene>`
-with `asm.json` in the session folder:
+with `asm.json` in the page folder:
 `{"units": "mm", "up": "z", "parts": [{"src": "base.stl", "group": "frame"}, {"src": "cooler.stl", "colour": "#e15759", "opacity": 0.6, "visible": false}, {"src": "asm.step", "split": true}]}`
 
 Several parts in one view. Config: `parts` (or `src` = a manifest `.json` with
@@ -235,7 +235,7 @@ a `todo` event, status `done`, `problem` or `later`, with the ticked steps.
 
 Example: `<canvas-animation data-canvas-id="mode3"><script type="application/json">{"frames": ["m3-00.png", "m3-01.png", "m3-02.png"], "fps": 8, "loop": true}</script></canvas-animation>`
 
-Config: `src` (a video in the session folder: WebM everywhere, MP4 only where the
+Config: `src` (a video in the page folder: WebM everywhere, MP4 only where the
 browser has the codec) or `frames` (1 to 300 pictures, in order); `fps?` (frames
 a second of a sequence, default 10; for a video only the step size, default
 30), `autoplay?`, `loop?`, `speed?` (0.25, 0.5, 1, 2 or 4), `alt?`.
@@ -248,11 +248,11 @@ at the first). Rewriting the file reloads it and keeps the position.
 
 Example: `<canvas-document data-canvas-id="spec"><script type="application/json">{"src": "spec.pdf", "height": 480}</script></canvas-document>`
 
-Config: `src` (a `.md`, `.markdown` or `.pdf` file in the session folder), `height?`
+Config: `src` (a `.md`, `.markdown` or `.pdf` file in the page folder), `height?`
 (window height in px, default 480), `title?`. The file scrolls in its own window and the
 page does not grow. Markdown is cleaned as in `canvas-markdown` (no script runs); a PDF
 has page-by-page drawing, zoom buttons and selectable text. "Open" shows a file of the
-session folder (not a subfolder) as a page of its own. Gives no events.
+page folder (not a subfolder) as a page of its own. Gives no events.
 
 ## `canvas-file`
 
@@ -260,7 +260,7 @@ Example: `<canvas-file data-canvas-id="out"><script type="application/json">{"pa
 
 Config: `path` (absolute, required), `size?`, `date?`, `machine?`, `note?` (shown as written). Shows
 a type badge, name and folder, with Copy for the path. "Open" shows only for a Markdown, PDF
-or picture file directly in the session folder. Gives no events.
+or picture file directly in the page folder. Gives no events.
 
 ## `canvas-source`
 
@@ -282,7 +282,7 @@ limits; never give a state. Shows the limit and the change from `previous` in pe
 
 Example: `<canvas-compare data-canvas-id="cmp"><script type="application/json">{"before": "a.png", "after": "b.png", "mode": "slider"}</script></canvas-compare>`
 
-Config: `before`, `after` (pictures in the session folder), `mode?` (`side` default, or `slider`:
+Config: `before`, `after` (pictures in the page folder), `mode?` (`side` default, or `slider`:
 one over the other), `before_label?`, `after_label?`. For a verdict put it inside a `canvas-ask`.
 
 ## Design kit

@@ -18,6 +18,7 @@ from starlette.routing import BaseRoute
 from agent_canvas import __version__
 from agent_canvas.config import load_keys, save_keys
 from agent_canvas.hub.auth import cookie_name
+from agent_canvas.hub.registry import is_project_id
 from agent_canvas.hub.routes.helper import (
     Declaration,
     Publish,
@@ -173,7 +174,9 @@ async def status(request: Request, svc: Services) -> Response:
             "build": state.build_id,
             "port": state.port,
             "window_connected": bool(state.shells),
-            "sessions": len(svc.registry.list(False, None)),
+            "sessions": sum(
+                not is_project_id(m["id"]) for m in svc.registry.list(False, None)
+            ),
         }
     )
 

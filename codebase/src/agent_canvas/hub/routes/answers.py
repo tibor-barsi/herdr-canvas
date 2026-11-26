@@ -32,7 +32,7 @@ from agent_canvas.hub.routes.helper import (
     failure,
     read_route,
 )
-from agent_canvas.hub.routes.sessions import _read_limited, known_session
+from agent_canvas.hub.routes.sessions import _read_limited, known_session, page_session
 from agent_canvas.hub.watcher import PageHistory
 
 BASE = "/api/sessions/{id}/answers"
@@ -64,11 +64,14 @@ def answers_message(svc: Services, session_id: str, page: str) -> dict[str, Any]
     dict[str, Any] | None
         The message; None for an unknown session or a name that is not a page.
     """
+    holder = page_session(svc, session_id)
+    if holder is None:
+        return None
     try:
         items = svc.answers.public(session_id, page)
-        folder = str(svc.state.session_of(session_id).folder)
     except (KeyError, ValueError):
         return None
+    folder = str(holder.folder)
     return {
         "type": "answers",
         "session": session_id,
@@ -212,8 +215,8 @@ async def post_answer(request: Request, svc: Services, publish: Publish) -> Resp
         "text": item.text[:80],
     }
     awaited = svc.asks.intercept(sid, event_kind, item_id)
-    latest = PageHistory(session.folder).latest(page)
-    event = svc.events.create(
+    latest = PageHistory(page_session(svc, sid).folder).latest(page)
+    event = svc.events.create_for(
         sid, event_kind, delivery="ask" if awaited else "now", page=page,
         page_version=latest[0] if latest else None, target=target, value=value,
         not_from_owner=body.get("no_gesture") is True,

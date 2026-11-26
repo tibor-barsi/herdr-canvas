@@ -35,7 +35,8 @@ Check it with `claude plugin validate <repo>/plugin --strict`.
 
 ## 3. Allow page writes (once)
 
-Pages live in `<project>/.agent-canvas/<session>/`. Claude writes them with its
+Pages live in `<project>/.agent-canvas/pool-TAG/`, one folder per project that all
+its sessions share. Claude writes them with its
 Edit/Write tools, which prompt for every file unless you allow the folder. Add
 this one rule to your user settings, `~/.claude/settings.json`:
 

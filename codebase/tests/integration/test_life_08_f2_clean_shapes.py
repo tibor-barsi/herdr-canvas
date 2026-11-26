@@ -15,10 +15,11 @@ from agent_canvas.hub.lifetime import DAY_SECONDS
 pytestmark = pytest.mark.integration
 
 
-def make_session(hub, sid: str) -> Path:  # noqa: ANN001
+def make_session(hub, sid: str, project: Path | None = None) -> Path:  # noqa: ANN001
+    """Show ``one.html`` for ``sid``; return the folder of its pool's record."""
     answer = httpx.post(
         f"{hub.base_url}/api/sessions/{sid}/path",
-        json={"project": str(hub.project_dir), "agent": "t"},
+        json={"project": str(project or hub.project_dir), "agent": "t"},
         headers=hub.key_headers,
     )
     folder = Path(answer.json()["folder"])
@@ -55,7 +56,9 @@ def test_life_08_f2_one_bad_session_json_leaves_the_others_alone(
     shape: str,
 ) -> None:
     bad = make_session(hub, "a")
-    good = make_session(hub, "b")
+    other = hub.project_dir.parent / "project-b"  # another pool, another record
+    other.mkdir()
+    good = make_session(hub, "b", other)
     httpx.post(
         f"{hub.base_url}/api/sessions/b/pages",
         json={"action": "archive", "name": "one.html"},
@@ -65,13 +68,12 @@ def test_life_08_f2_one_bad_session_json_leaves_the_others_alone(
     listed = httpx.get(f"{hub.base_url}/api/sessions", headers=hub.key_headers)
     assert listed.status_code == 200
     assert "b" in {s["id"] for s in listed.json()}
+    pool_b = hub.app.state.registry.pool_of("b")
     monkeypatch.setenv(clock.TEST_MODE, "1")
     monkeypatch.setenv(clock.TEST_CLOCK_OFFSET, str(31 * DAY_SECONDS))
     services = hub.app.state.services
-    removed = hub.on_loop(
-        lambda: purge_module.purge(services.registry)
-    )
-    assert "b/one.html" in removed
+    removed = hub.on_loop(lambda: purge_module.purge(services.registry))
+    assert f"{pool_b}/one.html" in removed
     assert not (good / "one.html").exists()
 
 
@@ -81,8 +83,9 @@ def test_life_08_f2_a_bad_shape_is_logged_once_and_counts_as_nothing(
 ) -> None:
     tamper(make_session(hub, "a"), SHAPES["pages-is-an-integer"])
     registry = hub.app.state.services.registry
+    pool = registry.pool_of("a")  # the tampered record is the pool's
     for _ in range(3):
-        assert registry.get("a").pages == ()
+        assert registry.get(pool).pages == ()
     logged = [r for r in caplog.records if "malformed" in r.getMessage()]
     assert len(logged) == 1
 
@@ -92,9 +95,10 @@ def test_life_08_f2_missing_keys_take_the_defaults_and_a_non_dict_entry_is_missi
 ) -> None:
     folder = make_session(hub, "a")
     registry = hub.app.state.services.registry
+    pool = registry.pool_of("a")  # the tampered record is the pool's
     tamper(folder, lambda m: m["page_meta"].update({"one.html": {"kind": "long-term"}}))
-    entry = registry.get("a").page_meta["one.html"]
+    entry = registry.get(pool).page_meta["one.html"]
     assert entry["kind"] == "long-term" and entry["set_by"] == "default"
     assert entry["archived"] is None and entry["counted_from"]
     tamper(folder, lambda m: m["page_meta"].update({"one.html": "x"}))
-    assert "one.html" not in registry.get("a").page_meta
+    assert "one.html" not in registry.get(pool).page_meta

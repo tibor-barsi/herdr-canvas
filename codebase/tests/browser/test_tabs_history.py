@@ -48,7 +48,7 @@ class Canvas:
         return answer["session"], Path(answer["folder"]), directory
 
     def show(self, sid, directory, name="page.html", html=None, title=None):  # noqa: ANN001, ANN201
-        folder = self.owner.hub.state.session_of(sid).folder
+        folder = self.owner.hub.state.session_of(self.owner.hub.pool_of(sid)).folder
         if html is not None:
             (folder / name).write_text(html)
         body = {"project": str(directory), "name": name}

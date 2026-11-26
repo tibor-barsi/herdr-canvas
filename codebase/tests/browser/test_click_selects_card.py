@@ -18,7 +18,9 @@ def test_press_in_card_selects_it_once_and_page_gets_click(owner, tmp_path) -> N
     while not owner.hub.state.shells:
         owner.page.wait_for_timeout(25)
     a, b = session(owner, tmp_path, "alpha"), session(owner, tmp_path, "beta")
-    (owner.hub.state.session_of(b).folder / "beta.html").write_text(BUTTON)
+    (owner.hub.state.session_of(owner.hub.pool_of(b)).folder / "beta.html").write_text(
+        BUTTON
+    )
     tab = {
         "id": "tb1",
         "name": "rig",

@@ -172,11 +172,19 @@ def with_status(document: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
-def unsent(folder: Path) -> dict[str, int]:
-    """Count the drafts on the session's existing pages (R-16): comments and files."""
+def unsent(folder: Path, card: str | None = None) -> dict[str, int]:
+    """
+    Count the drafts on the session's existing pages (R-16): comments and files.
+
+    In a pool only the drafts made in ``card`` count (POOL-05).
+    """
     with _lock:
         per_page = [
-            sum(1 for c in with_status(load(folder, name)) if c["status"] == "draft")
+            sum(
+                1
+                for c in with_status(load(folder, name))
+                if c["status"] == "draft" and of_card(c, card)
+            )
             for name in pages(folder)
             if (folder / name).is_file()
         ]
@@ -274,7 +282,9 @@ def _source_line(folder: Path, page: str, clean: dict[str, Any]) -> int | None:
     return found[at][1] if needle and at >= 0 else None
 
 
-def create(folder: Path, page: str, fields: Any) -> dict[str, Any]:
+def create(
+    folder: Path, page: str, fields: Any, card: str | None = None
+) -> dict[str, Any]:
     """
     Store a new draft comment under the next number of its page (COM-04).
 
@@ -288,6 +298,8 @@ def create(folder: Path, page: str, fields: Any) -> dict[str, Any]:
         ``kind``, ``text``, ``anchor``, ``page_version`` and optionally
         ``target``, ``text_inside``, ``data``, ``picture`` (base64 PNG) and
         ``picture_error`` (why there is no picture, COM-12).
+    card : str | None, optional
+        In a pool, the session whose card the comment is made in (POOL-05).
 
     Returns
     -------
@@ -335,6 +347,7 @@ def create(folder: Path, page: str, fields: Any) -> dict[str, Any]:
             "replies": [],
             "done": None,
             "last_done": None,
+            **({"card": card} if card else {}),
         }
         document["comments"].append(record)
         document["next"] = number + 1
@@ -417,6 +430,7 @@ def reply(
     text: str,
     author: str | None = None,
     done: bool = False,
+    card: str | None = None,
 ) -> dict[str, Any]:
     """
     Add a reply to a sent comment; an owner reply (``author`` None) clears done.
@@ -428,11 +442,14 @@ def reply(
     Raises
     ------
     CommentError
-        400 for a bad text, 404 for an unknown number, 409 for a draft comment.
+        400 for a bad text, 404 for an unknown number or a comment of another
+        ``card`` (A-1021), 409 for a draft comment.
     """
     _text(text, MAX_TEXT, "text")
 
     def apply(record: dict[str, Any]) -> None:
+        if not answerable(record, card):
+            raise CommentError("No such comment.", 404)
         _must_be_sent(record)
         record["replies"].append(
             {"from": author, "text": text, "at": now_iso(), "sent": None}
@@ -538,6 +555,7 @@ def take_unsent(
     delivery: str,
     send_event: str | None,
     stamp: str | None = None,
+    card: str | None = None,
 ) -> list[dict[str, Any]]:
     """
     Mark the drafts and unsent owner replies of a page sent and return them (COM-11).
@@ -554,6 +572,8 @@ def take_unsent(
         Id of the event the send created.
     stamp : str | None, optional
         The ``sent`` time to set, the event's time (5.3); default now.
+    card : str | None, optional
+        In a pool, take only the comments made in this card (POOL-05).
 
     Returns
     -------
@@ -567,8 +587,11 @@ def take_unsent(
         taken = [
             c
             for c in document["comments"]
-            if c["sent"] is None
-            or any(r["from"] is None and r["sent"] is None for r in c["replies"])
+            if of_card(c, card)
+            and (
+                c["sent"] is None
+                or any(r["from"] is None and r["sent"] is None for r in c["replies"])
+            )
         ]
         if not taken:
             return []
@@ -581,6 +604,20 @@ def take_unsent(
                     reply.update(sent=stamp, send_event=send_event)
         _save(folder, page, document)
         return taken
+
+
+def of_card(record: dict[str, Any], card: str | None) -> bool:
+    """Tell whether a comment belongs to ``card``; without a card every one does."""
+    return card is None or record.get("card") == card
+
+
+def answerable(record: dict[str, Any], card: str | None) -> bool:
+    """
+    Tell whether ``card``'s session may list, answer and close a comment.
+
+    Those of its own card, and those it took from the pool's inbox (A-1140).
+    """
+    return of_card(record, card) or card in record.get("taken_by", [])
 
 
 def restore_drafts(folder: Path, page: str, send_event: str) -> None:
@@ -597,14 +634,23 @@ def restore_drafts(folder: Path, page: str, send_event: str) -> None:
         _save(folder, page, document)
 
 
-def stamp_seen(folder: Path, page: str, numbers: list[int]) -> None:
-    """Add the time to the ``seen`` of comments an event just delivered (COM-11)."""
+def stamp_seen(
+    folder: Path, page: str, numbers: list[int], taker: str | None = None
+) -> None:
+    """
+    Add the time to the ``seen`` of comments an event just delivered (COM-11).
+
+    A ``taker`` other than the comment's card took it from the pool's inbox
+    and joins its ``taken_by`` (A-1140).
+    """
     with _lock:
         document = load(folder, page)
         stamp = now_iso()
         found = [c for c in document["comments"] if c["n"] in numbers]
         for record in found:
             record["seen"].append(stamp)
+            if taker and not of_card(record, taker):
+                record["taken_by"] = sorted({*record.get("taken_by", []), taker})
         if found:
             _save(folder, page, document)
 
@@ -628,6 +674,7 @@ def listing(
     *,
     mark_seen: bool = False,
     include_all: bool = False,
+    card: str | None = None,
 ) -> list[dict[str, Any]]:
     """
     Return the sent comments for the agent (RPL-01), by default the open ones.
@@ -642,6 +689,9 @@ def listing(
         Add the time to the ``seen`` of each listed comment.
     include_all : bool, optional
         Also the comments that are not open (answered, done).
+    card : str | None, optional
+        Only the comments made in this card of a pool (A-1021), or taken by its
+        session from the pool's inbox (A-1140).
 
     Returns
     -------
@@ -658,7 +708,9 @@ def listing(
             listed = [
                 c
                 for c in document["comments"]
-                if c["sent"] is not None and (include_all or open(c))
+                if c["sent"] is not None
+                and (include_all or open(c))
+                and answerable(c, card)
             ]
             if mark_seen and listed:
                 stamp = now_iso()

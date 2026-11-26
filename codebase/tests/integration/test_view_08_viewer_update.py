@@ -43,7 +43,7 @@ def test_view_08_a_new_markdown_version_is_pushed_as_text_for_the_viewer(
     shell.messages.clear()
     (folder / "notes.md").write_text("# two\n")
     [update] = updates(hub, shell, 1)
-    token = hub.state.session_of("a").page_token
+    token = hub.state.session_of(hub.pool_of("a")).page_token
     assert update["url"] == f"{hub.frame_origin}/s/{token}/notes.md?ac-view=1"
     assert update["html"] == "# two\n"
     assert update["viewer"] == "markdown"
@@ -85,7 +85,7 @@ def test_view_08_a_new_pdf_version_is_pushed_without_its_bytes_and_html_keeps_it
 
 
 def report(hub, shell: FakeShell, data: dict | None) -> None:  # noqa: ANN001
-    token = hub.state.session_of("a").page_token
+    token = hub.state.session_of(hub.pool_of("a")).page_token
     url = f"{hub.frame_origin}/s/{token}/fig.png?ac-view=1"
     shell.send(
         {"type": "page-report", "url": url, "name": "viewer-error", "data": data}
@@ -99,7 +99,7 @@ def test_view_14_the_hub_keeps_the_newest_report_per_page_version(
     report(hub, shell, first)
     report(hub, shell, {**first, "reason": "image-too-large"})
     report(hub, shell, {**first, "version": 2})
-    status = hub.state.page_status("a", "fig.png")
+    status = hub.state.page_status(hub.pool_of("a"), "fig.png")  # the pool's page
     hub.wait_for(lambda: len(status.viewer_errors) == 2, timeout=5)
     assert status.viewer_errors == {1: "image-too-large", 2: "image-undecodable"}
 
@@ -112,6 +112,6 @@ def test_view_14_an_unknown_reason_or_a_malformed_report_is_ignored(
     report(hub, shell, {**bad, "version": "x", "reason": "pdf-corrupt"})
     report(hub, shell, None)
     report(hub, shell, {**bad, "version": None, "reason": "pdf-corrupt"})
-    status = hub.state.page_status("a", "fig.png")
+    status = hub.state.page_status(hub.pool_of("a"), "fig.png")  # the pool's page
     hub.wait_for(lambda: len(status.viewer_errors) == 1, timeout=5)
     assert status.viewer_errors == {None: "pdf-corrupt"}

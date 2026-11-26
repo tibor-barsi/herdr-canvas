@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 
 from agent_canvas.hub.headless import HeadlessRenderer
-from helpers import decode_png
+from helpers import decode_png, own_draft
 
 from .conftest import _launch_env
 from .scene_fixtures import box_stl, glb_cube, torus_stl, two_solid_step
@@ -576,7 +576,7 @@ def test_scn_06_state_survives_publishing_a_draft(owner, make) -> None:  # noqa:
     made = make(page("live"), files=FILES)
     wait_scene(owner)
     before = change_everything(owner)
-    (made.folder / "page.draft.html").write_text(page("published"))
+    (made.folder / own_draft(made.sid)).write_text(page("published"))
     call(
         owner, "POST", f"/api/sessions/{made.sid}/show",
         json={"project": str(made.folder.parent.parent), "name": "page.html", "publish": True},

@@ -12,6 +12,8 @@ from pathlib import Path
 import httpx
 import pytest
 
+from .support import card_events
+
 pytestmark = pytest.mark.browser
 
 
@@ -45,7 +47,7 @@ def make(owner, tmp_path: Path):  # noqa: ANN001, ANN201
         directory.mkdir(exist_ok=True)
         body = {"project": str(directory), "agent": "claude", "title": "T"}
         sid = call(owner, "POST", "/api/sessions", json=body)["session"]
-        folder = owner.hub.state.session_of(sid).folder
+        folder = owner.hub.state.session_of(owner.hub.pool_of(sid)).folder
         (folder / "page.html").write_text(html)
         call(
             owner,
@@ -62,7 +64,7 @@ def make(owner, tmp_path: Path):  # noqa: ANN001, ANN201
 
 
 def events_of(owner, sid: str) -> list[dict]:  # noqa: ANN001
-    return owner.hub.on_loop(lambda: owner.hub.state.events.all(sid))
+    return card_events(owner.hub, sid)
 
 
 def wait_events(owner, sid: str, count: int) -> list[dict]:  # noqa: ANN001
@@ -274,7 +276,7 @@ def test_cli_07_a_real_click_in_a_raw_html_page_reaches_watch(
             while not last.done():
                 owner.page.wait_for_timeout(20)
             ended = json.loads(last.result())
-        assert line["kind"] == "custom" and line["session"] == sid
+        assert line["kind"] == "custom" and line["for"] == sid  # in the pool's log
         assert line["value"] == {"name": "pick", "value": 3}
         assert ended == {"type": "watch-ended", "reason": "count", "renew": False}
         assert process.wait(10) == 0

@@ -49,6 +49,7 @@
 .hv-ptabs{display:flex;gap:4px;padding:6px 8px;border-bottom:1px solid #222428;flex:none;white-space:nowrap;overflow:hidden}
 .hv-ptabs:empty{display:none}
 .hv-pt{padding:3px 8px;border-radius:6px;color:#9a9b9e;font-size:12px;cursor:pointer;overflow:hidden;text-overflow:ellipsis}
+.hv-pin{--m:url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZD0iTTkgMmg2djJsLTEgMXY1bDMgNHYyaC00LjV2NmgtMXYtNkg3di0ybDMtNFY1TDkgNHoiLz48L3N2Zz4=);width:10px;height:10px;margin-right:4px;vertical-align:-1px;color:#d9a441}
 .hv-pt.on{background:#2c2e31;color:#e4e4e6}
 .hv-frame{flex:1;min-height:0;position:relative}
 .hv-empty{position:absolute;inset:0}

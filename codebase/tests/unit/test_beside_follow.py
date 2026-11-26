@@ -75,3 +75,29 @@ def test_purge_runs_only_when_not_following(
     with TestClient(app):
         pass
     assert started == ([] if follow else [True])
+
+
+def test_pool_beside_mode_takes_the_daily_pool_tag_and_never_makes_a_pool(
+    tmp_path: Path,
+) -> None:
+    from agent_canvas.hub.registry import RegistryError, pool_key
+
+    daily = registry_in(tmp_path / "daily")
+    fork_dir = tmp_path / "fork"
+    fork_dir.mkdir()
+    fork = SessionRegistry(fork_dir, HubState(1, "another key", lambda: 0.0))
+    fork.follow_file = tmp_path / "daily" / "sessions.json"
+    pooled, bare = tmp_path / "pooled", tmp_path / "bare"
+    pooled.mkdir()
+    bare.mkdir()
+    daily.create("aaa", str(pooled), "claude-code", "A")
+    pool = daily.pool_session(pool_key(str(pooled)))
+    assert fork.follow() is True
+    assert fork.pool_tag == daily.pool_tag
+    assert fork.pool_of("aaa") == pool["id"]
+    assert fork.pool_session(pool_key(str(pooled)))["id"] == pool["id"]
+    fork.create("bbb", str(bare), "claude-code", "B")
+    with pytest.raises(RegistryError, match="beside"):
+        fork.pool_session(pool_key(str(bare)))
+    assert not list((bare / ".agent-canvas").glob("pool-*"))
+    assert not (fork_dir / "pool-tag").exists()

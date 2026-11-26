@@ -28,12 +28,15 @@ from typing import Any
 
 from agent_canvas.config import DEFAULT_PROJECT_DIR_NAME
 from agent_canvas.drafts import (
+    TAG_ENDING,
     DraftError,
+    draft_name_for,
     is_draft_name,
     publish_draft,
     published_name_for,
+    session_tag,
 )
-from agent_canvas.files_safe import write_safely
+from agent_canvas.files_safe import set_aside, write_safely
 from agent_canvas.hub import clock
 from agent_canvas.hub.lifetime import (
     ARCHIVE_DAYS,
@@ -45,6 +48,7 @@ from agent_canvas.hub.lifetime import (
     is_expired,
 )
 from agent_canvas.hub.state import HubState
+from agent_canvas.hub.watcher import PageHistory
 from agent_canvas.paths import make_private_dirs
 from agent_canvas.paths_safe import (
     InvalidSessionId,
@@ -68,7 +72,7 @@ KIND_TAG = re.compile(
 )
 # A reserved id (SessionStart hook) that was never used is forgotten after this.
 RESERVED_MAX_AGE_SECONDS = 7 * 24 * 3600
-# A project's pages live in one folder of this name (PROJ-01).
+# Ids of project pools (POOL-01); `project` was the folder of PROJ-01 and stays refused.
 PROJECT_FOLDER = "project"
 PROJECT_PREFIX = "project-"
 # Keys the hub reads without a fallback; a file lacking one counts as unreadable.
@@ -178,13 +182,29 @@ def git_top_folder(folder: str) -> str:
     return folder
 
 
-def project_session_id(project_key: str) -> str:
-    """Return the id of a project's pages: ``project-`` and 16 hex of SHA-256."""
-    return PROJECT_PREFIX + hashlib.sha256(project_key.encode()).hexdigest()[:16]
+def pool_key(project: str) -> str:
+    """
+    Return the project key of a session's pool (A-1003).
+
+    The git top folder, so sessions in sub-folders share the pool; the
+    session's own project when that folder is refused (a repo at home).
+    """
+    top = git_top_folder(project)
+    try:
+        validate_project(top, Path.home())
+    except UnsafePathError:
+        return project
+    return top
+
+
+def pool_id(tag: str, project_key: str) -> str:
+    """Return a project's pool id: ``project-`` and 16 hex of SHA-256 (A-1003)."""
+    digest = hashlib.sha256(f"{tag}\n{project_key}".encode()).hexdigest()
+    return PROJECT_PREFIX + digest[:16]
 
 
 def is_project_id(session_id: str) -> bool:
-    """Tell whether an id is reserved for project pages (PROJ-05)."""
+    """Tell whether an id is reserved for project pools (PROJ-05)."""
     lowered = session_id.lower()
     return lowered == PROJECT_FOLDER or lowered.startswith(PROJECT_PREFIX)
 
@@ -217,6 +237,8 @@ class SessionRegistry:
     ) -> None:
         self._subdir = Path(project_dir_name)
         self._file = state_dir / "sessions.json"
+        self._tag_file = state_dir / "pool-tag"
+        self._pool_tag: str | None = None
         self._hub = hub_state
         self._index: dict[str, dict[str, str]] = {}
         self._lacking: set[str] = set()
@@ -248,7 +270,7 @@ class SessionRegistry:
         self._followed_mtime = mtime
         changed = False
         for session_id, entry in entries.items():
-            folder = self._folder(session_id, entry.get("project", ""))
+            folder = self._folder(session_id, entry.get("project", ""), entry)
             if "reserved" in entry or self._index.get(session_id) == entry:
                 continue
             if not (folder / "session.json").is_file():
@@ -286,7 +308,7 @@ class SessionRegistry:
             if "reserved" in entry:
                 self._index[session_id] = entry
                 continue
-            folder = self._folder(session_id, entry["project"])
+            folder = self._folder(session_id, entry["project"], entry)
             if not (folder / "session.json").is_file():
                 print(
                     f"agent-canvas: skipping session {session_id}: "
@@ -421,12 +443,13 @@ class SessionRegistry:
             ]
         return sorted(metas, key=lambda m: str(m.get("created", "")))
 
-    def effective_title(self, meta: dict[str, Any]) -> str:
+    def effective_title(self, meta: dict[str, Any], folder: Path | None = None) -> str:
         """
         Return the title a tab shows (SES-06).
 
         The owner's name wins over the agent's title; without either, the
-        ``<title>`` of the active page, else the first 8 characters of the id.
+        ``<title>`` of the active page (in ``folder``, default the session's),
+        else the first 8 characters of the id.
         """
         for candidate in (meta.get("owner_title"), meta.get("title")):
             if candidate:
@@ -435,32 +458,62 @@ class SessionRegistry:
         if (
             page
             and page.lower().endswith(".html")
-            and (found := _page_title(self.folder_of(meta) / page))
+            and (found := _page_title((folder or self.folder_of(meta)) / page))
         ):
             return found
         return meta["id"][:8]
 
     def tab_of(self, meta: dict[str, Any]) -> dict[str, Any]:
-        """Return the tab description the shell needs for session ``meta``."""
-        entries = meta.get("page_meta", {})
-        live = live_pages(meta)
+        """
+        Return the tab description the shell needs for session ``meta``.
+
+        A member of a pool gets the pool's pinned pages and the pages it
+        touched, the one touched last active (else the first pinned page), and
+        the pool's address (POOL-03, POOL-04).
+        """
+        session_id = meta["id"]
+        pool = session_id if is_project_id(session_id) else self.pool_of(session_id)
+        source = (self._meta(pool) if pool else None) or meta
+        entries = source.get("page_meta", {})
+        live = live_pages(source)
+        pinned = [n for n in live if (entries.get(n) or {}).get("pinned")]
+        active = meta["active_page"]
+        if source is not meta and pool != session_id:
+            touched = {
+                n: seen["time"]
+                for n in live
+                if (seen := (entries.get(n) or {}).get("sessions", {}).get(session_id))
+                and seen["time"]
+            }
+            live = [n for n in live if n in touched or n in pinned]
+            active = max(touched, key=touched.__getitem__, default=None)
         starred = [n for n in live if (entries.get(n) or {}).get("starred")]
+        first = pinned + [n for n in starred if n not in pinned]
+        title = self.effective_title(
+            {**meta, "active_page": active}, self.folder_of(source)
+        )
+        if active is None and pinned and pool != session_id:
+            active = pinned[0]  # a card that touched nothing (A-1143)
         return {
-            "id": meta["id"],
+            "id": session_id,
             "project": meta["project"],
             "agent": meta["agent"],
-            "title": self.effective_title(meta),
+            "title": title,
             "owner_title": meta.get("owner_title"),
             "state": meta["state"],
-            "pages": starred + [n for n in live if n not in starred],
+            "pages": first + [n for n in live if n not in first],
             "starred": starred,
-            "active_page": meta["active_page"],
-            "base": self._hub.frame_url(meta["id"], ""),
+            "pinned": pinned,
+            "pool": pool,
+            "active_page": active,
+            "base": self._hub.frame_url(pool or session_id, ""),
         }
 
     def tabs(self, shown: Container[str] = ()) -> list[dict[str, Any]]:
         """
         Return the tabs of all visible (not hidden) sessions, oldest first.
+
+        A pool has a tab only while it holds a live page (A-1144).
 
         Parameters
         ----------
@@ -468,7 +521,10 @@ class SessionRegistry:
             Hidden sessions that get a tab all the same.
         """
         return self._tabs_of(
-            m for m in self.list(True, None) if not m["hidden"] or m["id"] in shown
+            m
+            for m in self.list(True, None)
+            if (not m["hidden"] or m["id"] in shown)
+            and (live_pages(m) or not is_project_id(m["id"]))
         )
 
     def closed_tabs(self) -> list[dict[str, Any]]:
@@ -525,13 +581,21 @@ class SessionRegistry:
         return self._create(session_id, project, agent, title)
 
     def _create(
-        self, session_id: str, project: str, agent: str, title: str | None
+        self,
+        session_id: str,
+        project: str,
+        agent: str,
+        title: str | None,
+        folder_name: str | None = None,
     ) -> dict[str, Any]:
         project_dir = self._check(session_id, project)
-        folder = self._folder(session_id, str(project_dir))
+        saved = {"folder": folder_name} if folder_name else {}
+        folder = self._folder(session_id, str(project_dir), saved)
         make_private_dirs(folder)
         _ensure_gitignore(folder.parent)
         adopted = self._read_existing(folder)
+        if adopted is None and (folder / "session.json").exists():
+            set_aside(folder / "session.json")  # damaged: keep it, never overwrite
         if adopted is not None:  # never trust the id and project it names
             adopted = {**adopted, "id": session_id, "project": str(project_dir)}
         meta = adopted or {
@@ -549,18 +613,48 @@ class SessionRegistry:
             "updated": stamp,
             "open_asks": [],
         }
-        self._write_meta(meta)
+        _write_json_atomic(folder / "session.json", meta)
         session = self._hub.register_session(session_id, folder)
         self._index[session_id] = {
             "project": str(project_dir),
             "page_token": session.page_token,
+            **saved,
         }
         self._save_index()
         return meta
 
-    def project_session(self, project_key: str) -> dict[str, Any]:
+    @property
+    def pool_tag(self) -> str:
         """
-        Return the pages session of a project, creating it if needed (PROJ-01).
+        The TAG of this hub's pools, saved when first made (A-1003, A-1027).
+
+        In beside mode it is the followed hub's saved TAG; none is made (A-1147).
+        """
+        if self._pool_tag is None and self.follow_file is not None:
+            try:
+                saved = (self.follow_file.parent / "pool-tag").read_text().strip()
+            except OSError:
+                saved = ""
+            if not re.fullmatch(r"[0-9a-f]{8}", saved):
+                return self._hub.credentials.pool_tag  # names no followed pool
+            self._pool_tag = saved
+        if self._pool_tag is None:
+            try:
+                saved = self._tag_file.read_text().strip()
+            except FileNotFoundError:
+                saved = ""
+            if not re.fullmatch(r"[0-9a-f]{8}", saved):
+                if saved:
+                    set_aside(self._tag_file)
+                saved = self._hub.credentials.pool_tag
+                self._tag_file.parent.mkdir(parents=True, exist_ok=True)
+                write_safely(self._tag_file, saved + "\n", mode=0o600)
+            self._pool_tag = saved
+        return self._pool_tag
+
+    def pool_session(self, project_key: str) -> dict[str, Any]:
+        """
+        Return the pool of a project, making it if needed (POOL-01).
 
         Parameters
         ----------
@@ -570,17 +664,71 @@ class SessionRegistry:
         Returns
         -------
         dict[str, Any]
-            Its ``session.json`` content (agent ``project``).
+            Its ``session.json`` content (agent ``project``, titled with the
+            project folder's name); the folder name is saved in the session list.
         """
-        folder = Path(project_key) / self._subdir / PROJECT_FOLDER
+        folder = self.pool_folder(project_key)
+        name = folder.name
         if folder.is_symlink():
             raise RegistryError("failed", f"{folder} is a symlink; refused.")
-        meta = self._meta(project_session_id(project_key))
+        session_id = pool_id(self.pool_tag, project_key)
+        meta = self._meta(session_id)
         if meta is not None:
             return meta
-        return self._create(
-            project_session_id(project_key), project_key, "project", "Project pages"
+        if self.follow_file is not None:
+            raise RegistryError(
+                "failed",
+                "This canvas runs beside the daily one and uses its project pools; "
+                "the daily canvas has none for this project yet, and this one does "
+                "not make one (A-1147). Use the daily canvas.",
+            )
+        title = Path(project_key).name
+        return self._create(session_id, project_key, "project", title, name)
+
+    def pool_folder(self, project_key: str) -> Path:
+        """Return the folder of a project's pool, made or not (POOL-01)."""
+        return Path(project_key) / self._subdir / f"pool-{self.pool_tag}"
+
+    def record_migrated(self, pool: str, name: str, record: dict[str, Any]) -> bool:
+        """
+        Record a page the migration copied into a pool (POOL-09).
+
+        The record is laid over a fresh page entry and the page joins the pool's
+        page list. A page that has a record already keeps it.
+
+        Parameters
+        ----------
+        pool : str
+            The pool's id.
+        name : str
+            The page's name in the pool.
+        record : dict[str, Any]
+            The migrated page's entry: its old settings, ``created_by``,
+            ``updated_by``, ``digest`` and ``sessions``.
+
+        Returns
+        -------
+        bool
+            True when the record was written.
+        """
+        meta = self._require(pool)
+        entries = meta.get("page_meta", {})
+        if name in entries:
+            return False
+        pages = meta["pages"] if name in meta["pages"] else [*meta["pages"], name]
+        entry = {**_new_entry(DEFAULT_KIND, "default"), **record}
+        self._write_meta(
+            {**meta, "pages": pages, "page_meta": {**entries, name: entry}}
         )
+        return True
+
+    def pool_of(self, session_id: str) -> str | None:
+        """Return the id of the registered pool of a session's project, else None."""
+        project = self.project_of(session_id)
+        if project is None or is_project_id(session_id):
+            return None
+        found = pool_id(self.pool_tag, pool_key(project))
+        return found if self.project_of(found) is not None else None
 
     def project_of(self, session_id: str) -> str | None:
         """Return the project directory of a known (real or reserved) session."""
@@ -692,6 +840,7 @@ class SessionRegistry:
             The session and whether it was just created. A known session keeps
             its recorded project and its folder is recreated if it vanished.
         """
+        self._refuse_project_id(session_id)
         meta = self._meta(validate_or_raise(session_id))
         if meta is None:
             if not project and self.is_reserved(session_id):
@@ -755,39 +904,57 @@ class SessionRegistry:
         publish: bool = False,
     ) -> tuple[dict[str, Any], str, Path]:
         """
-        Register a page of a known session as active and tell the shells.
+        Show a page of the session's pool as its active one and tell the shells.
+
+        The pool of the session's project is made if needed (POOL-01). A
+        publish or copy over a pool page this session has not seen in its
+        current content is refused (POOL-06, POOL-07); the check and the copy
+        run in one step. The session's touch is recorded (POOL-02).
 
         Parameters
         ----------
         session_id : str
-            A known session.
+            A known session (not a pool).
         name : str | None
-            Page name or absolute path inside the folder; default ``page.html``.
+            Page name or absolute path inside the pool; default ``page.html``.
         title : str | None
-            New agent title.
+            New agent title of the session.
         copy_from : str | None
-            External file to copy into the folder under its base name first.
+            External file to copy into the pool under its base name first.
         publish : bool, optional
-            Replace the page by its draft ``NAME.draft.html`` first (DRAFT-03).
+            Replace the page by the session's draft ``NAME.TAG.draft.html``
+            first (DRAFT-03, POOL-11).
 
         Returns
         -------
         tuple[dict[str, Any], str, pathlib.Path]
-            Updated session, page name and page path.
+            Updated pool session, page name and page path.
 
         Raises
         ------
         RegistryError
-            ``failed`` if the page is missing, unsafe or the copy fails, if
-            the name is a draft and ``publish`` is not given, or if there is
-            no draft to publish; ``no-session`` for an unknown session.
+            ``failed`` if the page is missing, unsafe, changed since the
+            session saw it, or the copy fails, if the name is a draft and
+            ``publish`` is not given, or if there is no draft to publish;
+            ``no-session`` for an unknown session or a pool id.
         """
-        meta = self._require(session_id)
+        self._refuse_project_id(session_id)
+        own = self._require(session_id)
+        if self.follow_file is not None and (publish or copy_from is not None):
+            raise RegistryError(
+                "failed",
+                "This canvas runs beside the daily one and reads its pages; it "
+                "does not publish or copy pages (A-1034). Use the daily canvas.",
+            )
+        meta = self.pool_session(pool_key(own["project"]))
         folder = self.folder_of(meta)
         try:
             if copy_from is not None:
-                # Refuse a bad type or a stem clash before anything is copied.
-                self._check_page(meta, folder, Path(copy_from).name)
+                # Refuse a bad type, a stem clash or a stale copy before copying.
+                copied = Path(copy_from).name
+                self._check_page(meta, folder, copied)
+                self._check_fresh(meta, folder, copied, session_id, publish=False)
+                _keep_version(folder, copied)
                 name = self._copy_into(folder, copy_from)
             name = name or DEFAULT_PAGE
             if not Path(name).suffix:
@@ -803,40 +970,96 @@ class SessionRegistry:
                     f"at it with `look {published_name_for(page)} --draft`.",
                 )
             if publish:
-                publish_draft(folder, page)
+                tag = session_tag(session_id)
+                if (folder / draft_name_for(page, tag)).is_file():
+                    self._check_fresh(meta, folder, page, session_id, publish=True)
+                    _keep_version(folder, page)
+                publish_draft(folder, page, tag)
             self._check_page(meta, folder, page)
         except (UnsafePathError, DraftError) as error:
             raise RegistryError("failed", str(error)) from error
         if not path.is_file():
             raise RegistryError(
                 "failed",
-                f"Page {page} not found in session folder {folder}."
+                f"Page {page} not found in the project's page folder {folder}."
                 + _closest_page(folder, page),
             )
         pages = meta["pages"] if page in meta["pages"] else [*meta["pages"], page]
         fields: dict[str, Any] = {"pages": pages, "active_page": page, "hidden": False}
-        if title:
-            fields["title"] = title
-        meta = self._update(session_id, **fields)
-        self.note_page(session_id, page)
-        self.restore(session_id, page)
-        self._hub.show_page(session_id, page)
+        meta = self._update(meta["id"], **fields)
+        self._update(session_id, hidden=False, **({"title": title} if title else {}))
+        self.note_page(meta["id"], page)
+        self.restore(meta["id"], page)
+        self._touch(meta["id"], page, session_id)
+        self._hub.show_page(session_id, page, meta["id"])
         return meta, page, path
 
-    def note_updater(self, session_id: str, name: str, who: dict[str, Any]) -> None:
-        """Record who updated a project page last: session, title, agent, time."""
-        meta = self._require(session_id)
-        self._store_entry(meta, name, {**self._entry(meta, name), "updated_by": who})
+    def _touch(self, pool: str, name: str, session_id: str) -> None:
+        """
+        Record that a session showed or published a pool page (POOL-02).
+
+        The first toucher is ``created_by``; a toucher whose page content
+        differs from the content at the last touch is ``updated_by`` (A-1018).
+        """
+        meta = self._require(pool)
+        entry = self._entry(meta, name)
+        digest = _digest(self.folder_of(meta) / name)
+        who = self.updater(session_id)
+        seen = {"time": who["time"], "digest": digest}
+        changed = entry.get("digest") != digest
+        entry = {
+            **entry,
+            "created_by": entry.get("created_by") or who,
+            "updated_by": who if changed else entry.get("updated_by"),
+            "digest": digest,
+            "sessions": {**entry.get("sessions", {}), session_id: seen},
+        }
+        self._store_entry(meta, name, entry)
+
+    def _check_fresh(
+        self,
+        meta: dict[str, Any],
+        folder: Path,
+        name: str,
+        session_id: str,
+        publish: bool,
+    ) -> None:
+        """
+        Refuse to replace a pool page the session has not seen as it is now.
+
+        A refusal records the current content as told to the session, so its
+        next attempt goes through (POOL-06, POOL-07, Q5).
+
+        Raises
+        ------
+        RegistryError
+            ``failed`` with what changed, by whom and what to do.
+        """
+        digest = _digest(folder / name)
+        if digest is None:
+            return
+        entry = self._entry(meta, name)
+        seen = entry.get("sessions", {}).get(session_id)
+        if seen is not None and seen["digest"] == digest:
+            return
+        told = {"time": (seen or {}).get("time"), "digest": digest}
+        sessions = {**entry.get("sessions", {}), session_id: told}
+        self._store_entry(meta, name, {**entry, "sessions": sessions})
+        if seen is None:
+            raise RegistryError("failed", _unread_message(name, entry))
+        latest = PageHistory(folder).latest(name)
+        version = latest[0] if latest else None
+        direct = entry.get("digest") != digest
+        raise RegistryError(
+            "failed", _stale_message(name, entry, version, publish, direct)
+        )
 
     def note_pages(self, session_id: str) -> None:
         """Give every page of a session its ``page_meta`` entry (LIFE-03)."""
         meta = self._require(session_id)
         folder = self.folder_of(meta)
         before = meta.get("page_meta", {})
-        kind = _default_kind(session_id)
-        entries = {
-            n: self._noted(folder, n, before.get(n), kind) for n in meta["pages"]
-        }
+        entries = {n: self._noted(folder, n, before.get(n)) for n in meta["pages"]}
         entries = {**before, **entries}
         if entries != before:
             self._write_meta({**meta, "page_meta": entries})
@@ -878,7 +1101,7 @@ class SessionRegistry:
             raise RegistryError(
                 "usage", f"Unknown kind {kind!r}; use one of {', '.join(KINDS)}."
             )
-        meta = self._require(session_id)
+        meta = self._holder(session_id)
         if name not in meta["pages"]:
             raise RegistryError("failed", f"{name} is not a page of this session.")
         entry = self._entry(meta, name)
@@ -904,15 +1127,30 @@ class SessionRegistry:
         Raises
         ------
         RegistryError
-            ``failed`` for a page not in the session or, when ``by`` is ``agent``,
-            a starred page (STAR-04),
-            ``no-session`` for an unknown session.
+            ``failed`` for a page not in the session, a pinned page (POOL-04)
+            or, when ``by`` is ``agent``, a starred page (STAR-04) or a pool
+            page the session never touched (A-1031); ``no-session`` for an
+            unknown session.
         """
-        meta = self._require(session_id)
+        meta = self._holder(session_id)
         entry = self._known_entry(meta, name)
+        if entry.get("pinned"):
+            raise RegistryError(
+                "failed", f"{name} is pinned to the project; unpin it first."
+            )
         if entry.get("starred") and by == "agent":
             raise RegistryError(
                 "failed", f"{name} is starred; only the owner can unstar it first."
+            )
+        if (
+            by == "agent"
+            and meta["id"] != session_id
+            and name not in self.touched(session_id)
+        ):
+            raise RegistryError(
+                "failed",
+                f"{name} was never touched by this session; only the owner or a "
+                "session that showed or published it archives it.",
             )
         if entry["archived"] is None:
             entry = {**entry, "archived": clock.iso(clock.now())}
@@ -947,8 +1185,9 @@ class SessionRegistry:
 
     def restore_page(self, session_id: str, name: str) -> dict[str, None]:
         """Restore a page for the ``restore`` action; ``archived`` is null after it."""
-        self._known_entry(self._require(session_id), name)
-        self.restore(session_id, name)
+        meta = self._holder(session_id)
+        self._known_entry(meta, name)
+        self.restore(meta["id"], name)
         return {"page": name, "archived": None}
 
     def drop_pages(self, session_id: str, names: list[str]) -> None:
@@ -971,14 +1210,14 @@ class SessionRegistry:
 
     def set_star(self, session_id: str, name: str, starred: bool) -> dict[str, Any]:
         """Set or clear the owner's star of a page (STAR-01); the owner's route only."""
-        meta = self._require(session_id)
+        meta = self._holder(session_id)
         entry = {**self._known_entry(meta, name), "starred": starred}
         self._store_entry(meta, name, entry)
         return {"page": name, "starred": starred}
 
     def extend(self, session_id: str, name: str) -> dict[str, str | None]:
         """Set ``extended`` of a page to now; answer its new expiry (LIFE-05)."""
-        meta = self._require(session_id)
+        meta = self._holder(session_id)
         entry = {**self._known_entry(meta, name), "extended": clock.iso(clock.now())}
         self._store_entry(meta, name, entry)
         when = expiry(entry, self._changed(meta, name))
@@ -987,18 +1226,97 @@ class SessionRegistry:
     def page_list(
         self, session_id: str, archived: bool = False
     ) -> list[dict[str, Any]]:
-        """Return the page rows of ``page list``; archived pages only on request."""
-        meta = self._require(session_id)
+        """
+        Return the page rows of ``page list``; archived pages only on request.
+
+        A pool member lists every page of its pool (A-1032).
+        """
+        meta = self._holder(session_id)
         rows = [{"name": n, **self.page_info(meta, n)} for n in meta["pages"]]
         return [r for r in rows if archived or r["archived"] is None]
 
-    def reminders(self, session_id: str, stamp: bool) -> list[dict[str, str]]:
-        """Return the reminders due now, and stamp ``reminded`` on them if ``stamp``."""
-        meta = self._require(session_id)
+    def set_pin(
+        self, session_id: str, name: str, pinned: bool, by: str = "agent"
+    ) -> dict[str, Any]:
+        """
+        Pin or unpin a page of a session's pool (POOL-04).
+
+        A pin also sets the kind ``long-term`` as :meth:`set_kind` does, so the
+        owner's earlier kind wins over an agent's pin; an unpin keeps the kind
+        (A-1030).
+
+        Parameters
+        ----------
+        session_id : str
+            A pool member, the pool, or an ordinary session.
+        name : str
+            A page of the pool; ``.html`` may be left out.
+        pinned : bool
+            Pin or unpin.
+        by : str, optional
+            ``agent`` or ``owner``.
+
+        Returns
+        -------
+        dict[str, Any]
+            ``page``, ``pinned``, ``kind`` and ``set_by``.
+        """
+        meta = self._holder(session_id)
+        if name not in meta["pages"] and f"{name}.html" in meta["pages"]:
+            name += ".html"  # as show takes it (A-1080)
+        self._store_entry(
+            meta, name, {**self._known_entry(meta, name), "pinned": pinned}
+        )
+        if pinned:
+            self.set_kind(meta["id"], name, "long-term", by)
+        entry = self._entry(self._require(meta["id"]), name)
+        return {
+            "page": name,
+            "pinned": pinned,
+            "kind": entry["kind"],
+            "set_by": entry["set_by"],
+        }
+
+    def touched(self, session_id: str) -> dict[str, str]:
+        """Return the pool pages a session touched, with the time it last did."""
+        pool = self.pool_of(session_id)
+        entries = (self._meta(pool) or {}).get("page_meta", {}) if pool else {}
+        return {
+            name: seen["time"]
+            for name, entry in entries.items()
+            if (seen := (entry or {}).get("sessions", {}).get(session_id))
+            and seen["time"]
+        }
+
+    def reminders(
+        self,
+        session_id: str,
+        stamp: bool,
+        alive: Callable[[str], bool] = lambda session_id: False,
+    ) -> list[dict[str, str]]:
+        """
+        Return the reminders due now, and stamp ``reminded`` on them if ``stamp``.
+
+        A pool page's reminder is for the session that last changed it; while
+        that one is not ``alive`` any session that touched the page takes it
+        (Ruling 1 of #2, A-1033).
+        """
+        meta = self._holder(session_id)
         now = clock.now()
-        pages = [
-            (n, self._entry(meta, n), self._changed(meta, n)) for n in meta["pages"]
-        ]
+        names = meta["pages"]
+        if meta["id"] != session_id:
+            touched = self.touched(session_id)
+            names = [
+                n
+                for n in names
+                if n in touched
+                and (
+                    (writer := _changer(meta, n)) == session_id
+                    or writer is None
+                    or not alive(writer)
+                )
+            ]
+        pages = [(n, self._entry(meta, n), self._changed(meta, n)) for n in names]
         due = due_reminders(pages, now)
         if stamp and due:
             named = {r["page"] for r in due}
@@ -1020,6 +1338,7 @@ class SessionRegistry:
         entry = self._entry(meta, name)
         changed = self._changed(meta, name)
         when = expiry(entry, changed)
+        pooled = is_project_id(meta["id"])  # pool pages say whether they are pinned
         return {
             "kind": entry["kind"],
             "set_by": entry["set_by"],
@@ -1028,11 +1347,12 @@ class SessionRegistry:
             "archived": entry["archived"],
             "starred": bool(entry.get("starred")),
             **({"updated_by": entry["updated_by"]} if "updated_by" in entry else {}),
+            **({"pinned": bool(entry.get("pinned"))} if pooled else {}),
         }
 
     def note_answered(self, session_id: str, name: str, stamp: str) -> None:
         """Record the time of the newest event of a page (5.2 ``answered``)."""
-        meta = self._meta(session_id)
+        meta = self._meta(self.pool_of(session_id) or session_id)  # a card: its pool
         if meta is not None and name in meta["pages"]:
             entry = {**self._entry(meta, name), "answered": stamp}
             self._store_entry(meta, name, entry)
@@ -1049,7 +1369,7 @@ class SessionRegistry:
         bool
             True when ``seen_version`` and ``seen_at`` were written.
         """
-        meta = self._meta(session_id)
+        meta = self._meta(self.pool_of(session_id) or session_id)  # a card: its pool
         if meta is None or name not in meta["pages"]:
             return False
         entry = self._entry(meta, name)
@@ -1086,7 +1406,7 @@ class SessionRegistry:
         RegistryError
             ``failed`` if the name is not of a type a page can have.
         """
-        meta = self._require(session_id)
+        meta = self._holder(session_id)
         folder = self.folder_of(meta)
         make_private_dirs(folder)
         path = Path(name)
@@ -1114,16 +1434,21 @@ class SessionRegistry:
 
     # ---- internals ---------------------------------------------------------
 
-    def _folder(self, session_id: str, project: str) -> Path:
-        name = PROJECT_FOLDER if session_id.startswith(PROJECT_PREFIX) else session_id
-        return Path(project) / self._subdir / name
+    def _folder(
+        self, session_id: str, project: str, entry: Mapping[str, Any] | None = None
+    ) -> Path:
+        """Return a session's folder; a pool's is the name saved in its entry."""
+        if not session_id.startswith(PROJECT_PREFIX):
+            return Path(project) / self._subdir / session_id
+        saved = (entry or self._index.get(session_id) or {}).get("folder")
+        return Path(project) / self._subdir / (saved or PROJECT_FOLDER)
 
     @staticmethod
     def _refuse_project_id(session_id: str) -> None:
-        """Refuse what no caller may do with the id of project pages (PROJ-05)."""
+        """Refuse what no caller may do with the id of a project pool (PROJ-05)."""
         if is_project_id(session_id):
             raise RegistryError(
-                "no-session", f"{session_id} is reserved for the project pages."
+                "no-session", f"{session_id} is reserved for the project's pages."
             )
 
     @staticmethod
@@ -1152,7 +1477,7 @@ class SessionRegistry:
         """Return the page's ``page_meta`` entry, made or kept current."""
         folder = self.folder_of(meta)
         entry = meta.get("page_meta", {}).get(name)
-        return self._noted(folder, name, entry, _default_kind(meta["id"]))
+        return self._noted(folder, name, entry)
 
     def _store_entry(
         self, meta: dict[str, Any], name: str, entry: dict[str, Any]
@@ -1163,12 +1488,7 @@ class SessionRegistry:
             self._write_meta({**meta, "page_meta": {**entries, name: entry}})
 
     @staticmethod
-    def _noted(
-        folder: Path,
-        name: str,
-        entry: dict[str, Any] | None,
-        default: str = DEFAULT_KIND,
-    ) -> dict[str, Any]:
+    def _noted(folder: Path, name: str, entry: dict[str, Any] | None) -> dict[str, Any]:
         """
         Return the ``page_meta`` entry of a page, made or kept current.
 
@@ -1178,7 +1498,7 @@ class SessionRegistry:
         if entry is not None and entry["set_by"] not in ("meta", "default"):
             return entry
         tagged = _page_kind(folder / name) if name.lower().endswith(".html") else None
-        kind, set_by = (tagged, "meta") if tagged else (default, "default")
+        kind, set_by = (tagged, "meta") if tagged else (DEFAULT_KIND, "default")
         if entry is None:
             return _new_entry(kind, set_by)
         return {**entry, "kind": kind, "set_by": set_by}
@@ -1211,21 +1531,27 @@ class SessionRegistry:
                 temporary.unlink(missing_ok=True)
         return name
 
-    @staticmethod
-    def _check_page(meta: dict[str, Any], folder: Path, name: str) -> None:
+    def _check_page(self, meta: dict[str, Any], folder: Path, name: str) -> None:
         """
         Check the type of page ``name`` and that its stem is not taken (VIEW-11).
 
         Raises
         ------
         UnsafePathError
-            For a type that cannot be a page, or when another page of the
+            For a type that cannot be a page, when the name ends in the draft
+            tag of a known session (A-1028), or when another page of the
             session has the same stem (the message names that page).
         """
         if is_draft_name(name):
             return
         validate_page_type(name)
         stem = Path(name).stem
+        ending = TAG_ENDING.search(stem)
+        if ending and ending.group()[1:].lower() in map(session_tag, self._index):
+            raise UnsafePathError(
+                f"{name} ends in a dot and the draft tag of a session; give the "
+                "page another name (A-1006, A-1028)."
+            )
         on_disk = (p.name for p in sorted(folder.glob("*.html")) if p.name[0] != ".")
         taken = [*meta["pages"], *on_disk]
         for other in taken:
@@ -1241,6 +1567,11 @@ class SessionRegistry:
             raise RegistryError("no-session", f"Unknown session {session_id}.")
         return meta
 
+    def _holder(self, session_id: str) -> dict[str, Any]:
+        """Return the session that holds a session's pages: its pool, or itself."""
+        self._require(session_id)
+        return self._require(self.pool_of(session_id) or session_id)
+
     def _update(self, session_id: str, **fields: Any) -> dict[str, Any]:
         meta = {**self._require(session_id), **fields, "updated": now_iso()}
         self._write_meta(meta)
@@ -1252,6 +1583,20 @@ class SessionRegistry:
     def _save_index(self) -> None:
         self._file.parent.mkdir(parents=True, exist_ok=True)
         _write_json_atomic(self._file, self._index, mode=0o600)
+
+
+def _changer(meta: Mapping[str, Any], name: str) -> str | None:
+    """Return the session that last changed a pool page, or None."""
+    entry = meta.get("page_meta", {}).get(name) or {}
+    who = entry.get("updated_by") or entry.get("created_by")
+    return who["session"] if who else None
+
+
+def _keep_version(folder: Path, name: str) -> None:
+    """Save a page as it is now before the hub replaces it (A-1008)."""
+    path = folder / name
+    if path.is_file():
+        PageHistory(folder).save(name, path.read_bytes())
 
 
 def _new_entry(kind: str, set_by: str) -> dict[str, Any]:
@@ -1272,15 +1617,69 @@ def _new_entry(kind: str, set_by: str) -> dict[str, Any]:
 _ENTRY_KEYS = frozenset(_new_entry(DEFAULT_KIND, "default"))
 
 
-def _default_kind(session_id: str) -> str:
-    """Return the kind a new page gets: project pages stay (PROJ-06)."""
-    return "long-term" if session_id.startswith(PROJECT_PREFIX) else DEFAULT_KIND
-
-
 def live_pages(meta: dict[str, Any]) -> list[str]:
     """Return the pages of a session that are not archived (LIFE-04)."""
     entries = meta.get("page_meta", {})
     return [n for n in meta["pages"] if not (entries.get(n) or {}).get("archived")]
+
+
+def _digest(path: Path) -> str | None:
+    """Return the SHA-256 of a file's content, None if it cannot be read."""
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        return None
+
+
+def _writer(who: Mapping[str, Any] | None) -> str:
+    """Name a page's writer as ``"title" (agent)``, or the agent alone."""
+    if not who:
+        return "another session"
+    return f'"{who["title"]}" ({who["agent"]})' if who.get("title") else who["agent"]
+
+
+def _local(stamp: str) -> datetime:
+    return datetime.fromtimestamp(_stamp_seconds(stamp))
+
+
+def _stale_message(
+    name: str,
+    entry: Mapping[str, Any],
+    version: int | None,
+    publish: bool,
+    direct: bool,
+) -> str:
+    """Return the refusal of a publish over a page changed since it was seen."""
+    who = entry.get("updated_by") or entry.get("created_by")
+    when = f" at {_local(who['time']):%H:%M on %-d %b}" if who else ""
+    number = f" (version {version})" if version else ""
+    # A content the record does not know was written straight into the folder.
+    how = "written directly into the folder" if direct else "changed"
+    by = "" if direct else f", by {_writer(who)}{when}"
+    if publish:
+        kept = "Your draft is kept"
+        again = (
+            "merge your change into your draft, then run "
+            f"`agent-canvas show {Path(name).stem} --publish` again"
+        )
+    else:
+        kept = "Your file is kept"
+        again = "merge your change into your file, then copy it in again"
+    return (
+        f"Not published: {name} was {how} after you last read it{by}{number}. "
+        f"{kept}. Read the current {name}, {again}."
+    )
+
+
+def _unread_message(name: str, entry: Mapping[str, Any]) -> str:
+    """Return the refusal of a publish over a page the session never read."""
+    who = entry.get("created_by")
+    made = f", made by {_writer(who)} on {_local(who['time']):%-d %b}" if who else ""
+    return (
+        f"Not published: this project already has a page {name}{made}, which you "
+        "have not read. If you meant to change it, read it, merge, and publish "
+        "again; if yours is a different page, give it a more specific name."
+    )
 
 
 def _closest_page(folder: Path, page: str) -> str:

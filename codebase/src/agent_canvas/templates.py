@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from agent_canvas.drafts import draft_name_for
+from agent_canvas.drafts import draft_name_for, is_draft_name
 from agent_canvas.paths_safe import validate_page_name
 
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
@@ -117,13 +117,15 @@ def write_template(folder: Path, page: str, template: str, force: bool = False) 
     Parameters
     ----------
     folder : pathlib.Path
-        Directory to write into (the session folder).
+        Directory to write into (the page folder).
     page : str
         Target file name, already checked by :func:`page_name_for`.
     template : str
         A key of :data:`TEMPLATES`.
     force : bool, optional
-        Overwrite an existing page. Default is False.
+        Overwrite an existing draft. A page that exists is never overwritten,
+        because the folder is shared by the project's sessions (POOL-11).
+        Default is False.
 
     Returns
     -------
@@ -142,8 +144,10 @@ def write_template(folder: Path, page: str, template: str, force: bool = False) 
         raise TemplateError(f"Unknown template {template!r}. Choose one of: {known}.")
     chosen = TEMPLATES[template]
     target = folder / page
-    if target.exists() and not force:
-        raise TemplateExistsError(f"{page} already exists; pass force to overwrite it.")
+    if target.exists() and not (force and is_draft_name(page)):
+        raise TemplateExistsError(
+            f"{page} already exists; change that page instead of writing it again."
+        )
     target.write_text(chosen.read_text(), encoding="utf-8")
     for asset, source in chosen.assets.items():
         if not (folder / asset).exists():
@@ -169,7 +173,12 @@ def describe_templates() -> dict[str, list[dict[str, str]]]:
 
 
 def new_page_result(
-    folder: Path, name: str, template: str, force: bool = False, draft: bool = True
+    folder: Path,
+    name: str,
+    template: str,
+    force: bool = False,
+    draft: bool = True,
+    tag: str | None = None,
 ) -> dict[str, str | bool]:
     """
     Validate ``name``, write the template and describe the result.
@@ -180,7 +189,7 @@ def new_page_result(
     Parameters
     ----------
     folder : pathlib.Path
-        The session folder.
+        The page folder.
     name : str
         Page name with or without ``.html``.
     template : str
@@ -188,9 +197,11 @@ def new_page_result(
     force : bool, optional
         Overwrite an existing file. Default is False.
     draft : bool, optional
-        Write the private draft ``NAME.draft.html`` instead of ``NAME.html``
-        (DRAFT-04). Default is True: a template is a starting point full of
-        placeholders that the owner should not see.
+        Write the session's private draft ``NAME.TAG.draft.html`` instead of
+        ``NAME.html`` (DRAFT-04, POOL-11). Default is True: a template is a
+        starting point full of placeholders that the owner should not see.
+    tag : str | None, optional
+        The session's draft tag, as ``session path`` prints it.
 
     Returns
     -------
@@ -209,7 +220,7 @@ def new_page_result(
     try:
         page = page_name_for(name)
         if draft:
-            page = draft_name_for(page)
+            page = draft_name_for(page, tag)
         path = write_template(folder, page, template, force)
     except TemplateExistsError as error:
         raise CliError("failed", str(error)) from error

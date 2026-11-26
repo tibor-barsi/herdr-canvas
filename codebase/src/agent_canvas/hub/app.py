@@ -12,6 +12,7 @@ import asyncio
 import contextlib
 import logging
 import re
+import socket
 import time
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
@@ -39,13 +40,9 @@ from agent_canvas.hub.headless import HeadlessRenderer
 from agent_canvas.hub.herdr_app import HerdrApp
 from agent_canvas.hub.looks import LookService
 from agent_canvas.hub.machines import MachineRouter, Machines
+from agent_canvas.hub.migrate import migrate_at_start
 from agent_canvas.hub.purge import PURGE_INTERVAL_SECONDS, purge
-from agent_canvas.hub.registry import (
-    SessionRegistry,
-    git_top_folder,
-    is_project_id,
-    project_session_id,
-)
+from agent_canvas.hub.registry import SessionRegistry
 from agent_canvas.hub.results import ResultService
 from agent_canvas.hub.routes import all_routes
 from agent_canvas.hub.routes.answers import answers_message, build_answers_view
@@ -272,12 +269,11 @@ def _event_created(
 def _send_changed(
     state: HubState, events: EventService, session_id: str, event: dict[str, Any]
 ) -> None:
-    """Tell the windows what became of the session's newest send (FB-10)."""
+    """Tell the windows what became of the card's newest send (FB-10, POOL-05)."""
     if event["kind"] == "send":
-        send = events.latest_send(session_id)
-        state.channel.broadcast(
-            {"type": "send-state", "session": session_id, "send": send}
-        )
+        card = event.get("for") or session_id
+        send = events.latest_send(card)
+        state.channel.broadcast({"type": "send-state", "session": card, "send": send})
 
 
 def _comments_seen(services: Services, session_id: str, page: str) -> None:
@@ -298,6 +294,14 @@ def _pages_of(registry: SessionRegistry, session_id: str) -> tuple[str, ...]:
     return meta.pages if meta else ()
 
 
+def _card_pages(registry: SessionRegistry, session_id: str) -> tuple[str, ...]:
+    """Return the pages of a card: a pool member's are those its tab lists."""
+    meta = registry.get(session_id)
+    if meta is None or registry.pool_of(session_id) is None:
+        return _pages_of(registry, session_id)
+    return tuple(registry.tab_of(meta.raw)["pages"])
+
+
 def _shown_pages(registry: SessionRegistry, session_id: str) -> list[str]:
     """Return the HTML pages a session has shown (ANS-04)."""
     return [p for p in _pages_of(registry, session_id) if is_page_name(p)]
@@ -307,32 +311,37 @@ def _event_delivered(answers: AnswerStore, session_id: str, event: dict) -> None
     """Stamp the item of an answer, to-do or change event the agent got (ANS-03)."""
     target = event.get("target") or {}
     if event["kind"] in READ_KINDS and event.get("page") and target.get("canvas_id"):
-        answers.mark_read(session_id, event["page"], target["canvas_id"], event["id"])
+        card = event.get("for") or session_id
+        answers.mark_read(card, event["page"], target["canvas_id"], event["id"])
 
 
-def _project_session(registry: SessionRegistry, session_id: str) -> str | None:
-    """Return the registered project session of a real or reserved session (PROJ-07)."""
-    project = registry.project_of(session_id)
-    if project is None or is_project_id(session_id):
-        return None
-    found = project_session_id(git_top_folder(project))
-    return found if registry.project_of(found) is not None else None
-
-
-def _project_receiver(
-    registry: SessionRegistry,
-    events: EventService,
-    project_id: str,
-    event: dict[str, Any],
+def _pool_receiver(
+    events: EventService, herdr_app: HerdrApp, event: dict[str, Any]
 ) -> str | None:
-    """Return the page's last updater while it runs, else None: the inbox (PROJ-07)."""
-    meta = registry.get(project_id)
-    page = event.get("page") or (meta.active_page if meta else None)
-    updater = ((meta.page_meta if meta else {}).get(page) or {}).get("updated_by")
-    session_id = updater["session"] if updater else None
-    if session_id and events.listening(session_id):
-        return session_id
+    """
+    Return the card an event is for while it is alive, else None: the inbox.
+
+    Alive means listening, in a Herdr pane, or in a live Claude Code process
+    (POOL-05, A-1009, A-1120).
+    """
+    card = event.get("for")
+    if card and (events.listening(card) or herdr_app.alive(card)):
+        return card
     return None
+
+
+def _touched(
+    registry: SessionRegistry, pool: str, page: str | None, session_id: str
+) -> bool:
+    """Tell whether a session touched a pool page, or any one for None (A-1020)."""
+    meta = registry.get(pool)
+    entries = meta.page_meta if meta else {}
+    return any(
+        ((entries.get(name) or {}).get("sessions", {}).get(session_id) or {}).get(
+            "time"
+        )
+        for name in ([page] if page else list(entries))
+    )
 
 
 def _with_light(
@@ -461,9 +470,9 @@ def create_app(
     looks = LookService(state, HeadlessRenderer())
     looks.show_audit = config.show_audit
     state.looks = looks
-    answers = AnswerStore(
-        lambda sid: state.session_of(sid).folder,
-        lambda sid: agent_pages(_pages_of(registry, sid)),
+    answers = AnswerStore(  # a card's items are those of its pool (POOL-05)
+        lambda sid: state.session_of(registry.pool_of(sid) or sid).folder,
+        lambda sid: agent_pages(_card_pages(registry, sid)),
         lambda sid, page: _answers_changed(services, sid, page),
     )
     watcher = PageWatcher(
@@ -475,6 +484,8 @@ def create_app(
         lambda sid: _pages_of(registry, sid),
     )
     registry.load()
+    if not config.follow_state:  # before any pool is served or watched (POOL-09)
+        migrate_at_start(registry)
     for session in registry.list(True, None):
         registry.note_pages(session["id"])  # pages that exist now start their count
     launcher = WindowLauncher(config, state, clock)
@@ -493,10 +504,9 @@ def create_app(
             _event_created(registry, sid, event),
             _send_changed(state, events, sid, event),
         ),
-        project_of=lambda sid: _project_session(registry, sid),
-        receiver_of=lambda project, event: _project_receiver(
-            registry, events, project, event
-        ),
+        project_of=registry.pool_of,
+        receiver_of=lambda project, event: _pool_receiver(events, herdr_app, event),
+        touched=lambda pool, page, sid: _touched(registry, pool, page, sid),
     )
     state.events = events
     asks = AskService(
@@ -583,9 +593,12 @@ class _FreshStaticFiles(StaticFiles):
 
 
 def _is_watched(registry: SessionRegistry, session_id: str) -> bool:
-    """Watch a session unless it is ended or hidden (HUB-05)."""
+    """Watch a session unless it is ended, hidden or a pool's member (HUB-05)."""
     meta = registry.get(session_id)
-    return meta is None or (meta.state == "active" and not meta.hidden)
+    if meta is None:
+        return True
+    active = meta.state == "active" and not meta.hidden
+    return active and registry.pool_of(session_id) is None
 
 
 def _tab(registry: SessionRegistry, state: HubState, session_id: str) -> dict[str, Any]:
@@ -611,12 +624,22 @@ def run_hub(config: Config, state_dir: Path) -> None:
     ------
     agent_canvas.hub.auth.KeyFileError
         If the key file has unsafe permissions.
+    OSError
+        If the port is taken (another hub holds it); nothing was migrated then.
     """
     import uvicorn
 
-    app = create_app(config, state_dir)
-    server = uvicorn.Server(
-        uvicorn.Config(app, host="127.0.0.1", port=config.port, log_level="warning")
-    )
+    # The port is held before the migration (POOL-09): a second hub stops here,
+    # and a client's probe waits in the queue instead of starting another hub.
+    listening = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    listening.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        listening.bind(("127.0.0.1", config.port))
+        listening.listen(2048)
+        app = create_app(config, state_dir)
+    except BaseException:
+        listening.close()
+        raise
+    server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))
     app.state.hub.shutdown = lambda: setattr(server, "should_exit", True)
-    server.run()
+    server.run(sockets=[listening])

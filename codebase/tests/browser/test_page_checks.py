@@ -11,6 +11,8 @@ from pathlib import Path
 
 import pytest
 
+from agent_canvas.drafts import session_tag
+
 from .support import call, owner_field
 
 pytestmark = pytest.mark.browser
@@ -460,7 +462,7 @@ def test_chk_18_a_template_draft_reports_only_its_placeholders(
     from agent_canvas.templates import new_page_result
 
     made = make("<p>start</p>")
-    new_page_result(made.folder, "tpl", template, False, True)
+    new_page_result(made.folder, "tpl", template, False, True, session_tag(made.sid))
     owner.page.emulate_media(color_scheme=scheme)
     owner.page.wait_for_timeout(300)
     result = look(

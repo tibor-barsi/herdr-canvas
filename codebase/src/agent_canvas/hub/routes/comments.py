@@ -27,7 +27,7 @@ from agent_canvas.hub.routes.helper import (
     failure,
     read_route,
 )
-from agent_canvas.hub.routes.sessions import _read_limited, known_session
+from agent_canvas.hub.routes.sessions import _read_limited, card_of, page_session
 from agent_canvas.hub.watcher import PageHistory
 
 MAX_BODY_BYTES = 14 * 1024 * 1024  # a 10 MB picture in base64 and the other fields
@@ -63,17 +63,21 @@ def comments_message(
     svc : Services
         The service bundle.
     session_id, page : str
-        The session and the page.
+        The card's session and the page; a pool page's comments come from the
+        pool, and ``unsent`` counts the card's own drafts (A-1025).
 
     Returns
     -------
     dict[str, Any] | None
         The message; None for an unknown session or page name.
     """
+    session = page_session(svc, session_id)
+    if session is None:
+        return None
+    folder = session.folder
     try:
-        folder = svc.state.session_of(session_id).folder
         document = comments.load(folder, page)
-    except (KeyError, CommentError):
+    except CommentError:
         return None
     return {
         "type": "comments",
@@ -81,7 +85,7 @@ def comments_message(
         "page": page,
         "next": document["next"],
         "comments": comments.with_status(document),
-        "unsent": comments.unsent(folder),
+        "unsent": comments.unsent(folder, card_of(session, session_id)),
     }
 
 
@@ -142,22 +146,23 @@ async def create_comment(request: Request, svc: Services, publish: Publish) -> R
     """Store a draft comment and answer its record (cookie only, COM-04)."""
     if not _is_owner(request, svc):
         return _owner_only()
-    session = known_session(svc, request)
+    card = request.path_params["id"]
+    session = page_session(svc, card)
     if session is None:
         return failure(RegistryError("no-session", "Unknown session."))
     try:
         body = await _body(request)
-        key, kept = _repeat(session.session_id, body)
+        key, kept = _repeat(card, body)
         if kept is not None:
             return JSONResponse(kept)
         page = body.get("page")
         if not isinstance(page, str) or not (session.folder / page).is_file():
             raise CommentError("page must name a page of the session.")
-        record = comments.create(session.folder, page, body)
+        record = comments.create(session.folder, page, body, card_of(session, card))
     except CommentError as error:
         return _refused(error)
     _remember(key, record)
-    changed(svc, publish, session.session_id, page)
+    changed(svc, publish, card, page)
     return JSONResponse(record)
 
 
@@ -171,12 +176,13 @@ async def edit_comment(request: Request, svc: Services, publish: Publish) -> Res
     """
     if not _is_owner(request, svc):
         return _owner_only()
-    session = known_session(svc, request)
+    card = request.path_params["id"]
+    session = page_session(svc, card)
     if session is None:
         return failure(RegistryError("no-session", "Unknown session."))
     try:
         body = await _body(request)
-        key, kept = _repeat(session.session_id, body)
+        key, kept = _repeat(card, body)
         if kept is not None:
             return JSONResponse(kept)
         page, number = body.get("page"), body.get("n")
@@ -213,7 +219,7 @@ async def edit_comment(request: Request, svc: Services, publish: Publish) -> Res
     except CommentError as error:
         return _refused(error)
     _remember(key, result)
-    changed(svc, publish, session.session_id, page)
+    changed(svc, publish, card, page)
     return JSONResponse(result)
 
 
@@ -243,7 +249,8 @@ async def reply_comment(request: Request, svc: Services, publish: Publish) -> Re
     """
     if not _is_agent(request, svc):
         return _owner_only("Only an agent replies here; the window replies by edit.")
-    session = known_session(svc, request)
+    card = request.path_params["id"]
+    session = page_session(svc, card)
     if session is None:
         return failure(RegistryError("no-session", "Unknown session."))
     try:
@@ -257,14 +264,20 @@ async def reply_comment(request: Request, svc: Services, publish: Publish) -> Re
             or type(body.get("done", False)) is not bool
         ):
             raise CommentError("Body must be {page, n, text, from?, done?}.")
-        registered = svc.registry.get(session.session_id)
+        registered = svc.registry.get(card)
         author = _author(body, (registered.agent if registered else None) or "agent")
         record = comments.reply(
-            session.folder, page, number, text, author, body.get("done", False)
+            session.folder,
+            page,
+            number,
+            text,
+            author,
+            body.get("done", False),
+            card_of(session, card),
         )
     except CommentError as error:
         return _refused(error)
-    changed(svc, publish, session.session_id, page)
+    changed(svc, publish, card, page)
     answer = {
         "page": page,
         "n": number,
@@ -284,7 +297,8 @@ async def done_comments(request: Request, svc: Services, publish: Publish) -> Re
     by = "agent" if _is_agent(request, svc) else "owner"
     if by == "owner" and not _is_owner(request, svc):
         return _owner_only()
-    session = known_session(svc, request)
+    card = request.path_params["id"]
+    session = page_session(svc, card)
     if session is None:
         return failure(RegistryError("no-session", "Unknown session."))
     try:
@@ -298,6 +312,9 @@ async def done_comments(request: Request, svc: Services, publish: Publish) -> Re
         ):
             raise CommentError("Body must be {page, n: [numbers]}.")
         stored = {c["n"]: c for c in comments.load(session.folder, page)["comments"]}
+        if by == "agent":  # an agent closes only what it may answer (A-1021, A-1140)
+            mine = card_of(session, card)
+            stored = {n: c for n, c in stored.items() if comments.answerable(c, mine)}
         for number in numbers:
             if number not in stored:
                 raise CommentError(f"No comment {number}.", 404)
@@ -307,7 +324,7 @@ async def done_comments(request: Request, svc: Services, publish: Publish) -> Re
             comments.set_done(session.folder, page, number, by)
     except CommentError as error:
         return _refused(error)
-    changed(svc, publish, session.session_id, page)
+    changed(svc, publish, card, page)
     return JSONResponse({"page": page, "done": numbers})
 
 
@@ -320,7 +337,8 @@ async def report_lost(request: Request, svc: Services, publish: Publish) -> Resp
     """
     if not _is_owner(request, svc):
         return _owner_only()
-    session = known_session(svc, request)
+    card = request.path_params["id"]
+    session = page_session(svc, card)
     if session is None:
         return failure(RegistryError("no-session", "Unknown session."))
     try:
@@ -349,7 +367,7 @@ async def report_lost(request: Request, svc: Services, publish: Publish) -> Resp
     except CommentError as error:
         return _refused(error)
     if stored:
-        changed(svc, publish, session.session_id, page)
+        changed(svc, publish, card, page)
     return JSONResponse({"page": page, "stored": stored})
 
 
@@ -360,7 +378,8 @@ async def list_comments(request: Request, svc: Services) -> Response:
     With the key the listed comments are marked seen. The window's cookie needs
     ``page`` and gets the page's drafts too, as they must survive a reload.
     """
-    session = known_session(svc, request)
+    card = request.path_params["id"]
+    session = page_session(svc, card)
     if session is None:
         return failure(RegistryError("no-session", "Unknown session."))
     page = request.query_params.get("page")
@@ -371,11 +390,12 @@ async def list_comments(request: Request, svc: Services) -> Response:
                 page,
                 mark_seen=True,
                 include_all=request.query_params.get("all") == "1",
+                card=card_of(session, card),
             )
-            return JSONResponse({"session": session.session_id, "comments": listed})
+            return JSONResponse({"session": card, "comments": listed})
         if page is None:
             raise CommentError("page is required.")
-        message = comments_message(svc, session.session_id, page)
+        message = comments_message(svc, card, page)
         if message is None:
             raise CommentError("Invalid page name.")
     except CommentError as error:

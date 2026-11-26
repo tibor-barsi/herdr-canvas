@@ -9,6 +9,7 @@ import httpx
 import pytest
 
 from agent_canvas.hub.watcher import PageHistory
+from helpers import own_draft
 from shellfake import FakeShell
 
 pytestmark = pytest.mark.integration
@@ -35,7 +36,7 @@ def shown(cli, hub, shell) -> dict:  # noqa: ANN001
 
 
 def test_draft_02_a_draft_changes_nothing_in_the_window(cli, hub, shell, shown) -> None:  # noqa: ANN001
-    draft = shown["folder"] / "page.draft.html"
+    draft = shown["folder"] / own_draft(shown["id"])
     draft.write_text("<p>first idea</p>")
     time.sleep(0.7)
     draft.write_text("<p>second idea</p>")
@@ -45,7 +46,7 @@ def test_draft_02_a_draft_changes_nothing_in_the_window(cli, hub, shell, shown) 
     assert shell.types() == []
     pages = PageHistory(shown["folder"])
     assert [n for n, _ in pages.versions("page.html")] == [1]
-    assert pages.versions("page.draft.html") == []
+    assert pages.versions(own_draft(shown["id"])) == []
     assert hub.state.tab_provider(shown["id"])["pages"] == ["page.html"]
     assert hub.on_loop(lambda: hub.state.events.all(shown["id"])) == []
 
@@ -56,16 +57,17 @@ def test_draft_02_other_data_files_still_reach_the_window(hub, shell, shown) -> 
 
 
 def test_draft_02_a_draft_cannot_be_shown(cli, shown) -> None:  # noqa: ANN001
-    (shown["folder"] / "page.draft.html").write_text("<p>x</p>")
-    result = cli("show", "page.draft.html", "--session", shown["id"])
+    (shown["folder"] / own_draft(shown["id"])).write_text("<p>x</p>")
+    result = cli("show", own_draft(shown["id"]), "--session", shown["id"])
     assert result.code == 1
     assert "--publish" in result.json["message"] and "look" in result.json["message"]
 
 
 def test_draft_01_a_draft_is_served_like_a_session_file(hub, shown) -> None:  # noqa: ANN001
-    (shown["folder"] / "page.draft.html").write_text("<p>draft text</p>")
-    token = hub.state.session_of(shown["id"]).page_token
-    url = f"{hub.frame_origin}/s/{token}/page.draft.html"
+    (shown["folder"] / own_draft(shown["id"])).write_text("<p>draft text</p>")
+    token = hub.state.session_of(hub.pool_of(shown["id"])).page_token
+    draft_name = own_draft(shown["id"])
+    url = f"{hub.frame_origin}/s/{token}/{draft_name}"
     answer = httpx.get(url)
     assert answer.status_code == 200 and "draft text" in answer.text
     assert "helper.js" in answer.text  # the helper runs, so the look can report
@@ -74,14 +76,14 @@ def test_draft_01_a_draft_is_served_like_a_session_file(hub, shown) -> None:  # 
 
 def test_draft_03_publish_copies_the_draft_and_shows_it(cli, hub, shell, shown) -> None:  # noqa: ANN001
     folder = shown["folder"]
-    (folder / "page.draft.html").write_text("<p>better</p>")
+    (folder / own_draft(shown["id"])).write_text("<p>better</p>")
     result = cli("show", "page.html", "--publish", "--session", shown["id"])
     assert result.code == 0, result.err
     assert (folder / "page.html").read_text() == "<p>better</p>"
-    assert (folder / "page.draft.html").read_text() == "<p>better</p>"
+    assert (folder / own_draft(shown["id"])).read_text() == "<p>better</p>"
     assert result.json["page"] == "page.html" and result.json["version"] == 2
     leftovers = {p.name for p in folder.iterdir()} - {
-        "page.html", "page.draft.html", "session.json", "events.jsonl", "history",
+        "page.html", own_draft(shown["id"]), "session.json", "events.jsonl", "history",
     }  # fmt: skip
     assert leftovers == set()  # no temporary file stays behind
     assert "show" in shell.types()
@@ -89,14 +91,14 @@ def test_draft_03_publish_copies_the_draft_and_shows_it(cli, hub, shell, shown) 
 
 
 def test_draft_03_publish_without_a_name_uses_the_default_page(cli, shown) -> None:  # noqa: ANN001
-    (shown["folder"] / "page.draft.html").write_text("<p>via default</p>")
+    (shown["folder"] / own_draft(shown["id"])).write_text("<p>via default</p>")
     result = cli("show", "--publish", "--session", shown["id"])
     assert result.code == 0, result.err
     assert (shown["folder"] / "page.html").read_text() == "<p>via default</p>"
 
 
 def test_draft_03_publishing_a_new_page_creates_it(cli, shown) -> None:  # noqa: ANN001
-    (shown["folder"] / "fresh.draft.html").write_text("<p>fresh</p>")
+    (shown["folder"] / own_draft(shown["id"], "fresh")).write_text("<p>fresh</p>")
     result = cli("show", "fresh", "--publish", "--session", shown["id"])
     assert result.code == 0, result.err
     assert result.json["page"] == "fresh.html"
@@ -105,12 +107,12 @@ def test_draft_03_publishing_a_new_page_creates_it(cli, shown) -> None:  # noqa:
 
 def test_draft_03_publish_without_a_draft_fails_and_keeps_the_page(cli, shown) -> None:  # noqa: ANN001
     result = cli("show", "page.html", "--publish", "--session", shown["id"])
-    assert result.code == 1 and "page.draft.html" in result.json["message"]
+    assert result.code == 1 and own_draft(shown["id"]) in result.json["message"]
     assert (shown["folder"] / "page.html").read_text() == "<p>published</p>"
 
 
 def test_draft_03_a_second_publish_makes_a_second_version(cli, shown) -> None:  # noqa: ANN001
-    draft = shown["folder"] / "page.draft.html"
+    draft = shown["folder"] / own_draft(shown["id"])
     for text in ("<p>v2</p>", "<p>v3</p>", "<p>v3</p>"):
         draft.write_text(text)
         assert cli("show", "--publish", "--session", shown["id"]).code == 0

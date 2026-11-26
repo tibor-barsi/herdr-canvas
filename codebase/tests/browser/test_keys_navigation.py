@@ -185,11 +185,15 @@ def test_keys_04_spaces_include_not_in_herdr_and_wrap(world) -> None:  # noqa: A
         assert world.page.evaluate(ROW) == row, key
     assert ("space", "sp2") in world.sent
     world.press("Control+Alt+3")
-    assert world.page.evaluate(FOCUSED) == world.ids["f"]
-    world.press(
-        "Alt+]"
-    )  # the tabs of that entry are its sessions; one session, one tab
-    assert world.page.evaluate(FOCUSED) == world.ids["f"]
+    # The tabs of that entry: its session and the pools of the six projects, each
+    # holding a page (A-1144).
+    pills = world.page.evaluate(
+        "() => [...document.querySelectorAll('.hv-pill')].map((p) => p.dataset.session)"
+    )
+    assert world.ids["f"] in pills and len(pills) == 7
+    assert world.page.evaluate(FOCUSED) == pills[0]
+    world.press("Alt+]")
+    assert world.page.evaluate(FOCUSED) == pills[1]
 
 
 def test_keys_05_navigation_does_not_echo_back_to_herdr(world) -> None:  # noqa: ANN001
@@ -242,7 +246,7 @@ def test_keys_07_an_unbound_key_does_nothing(world) -> None:  # noqa: ANN001
 
 def test_keys_08_page_tabs_of_a_card_move_with_the_page_keys(world) -> None:  # noqa: ANN001
     a = world.ids["a"]
-    folder = world.owner.hub.state.session_of(a).folder
+    folder = world.owner.hub.state.session_of(world.owner.hub.pool_of(a)).folder
     (folder / "second.html").write_text("<p>second</p>")
     directory = folder.parent
     call(

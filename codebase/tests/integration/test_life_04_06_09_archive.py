@@ -233,6 +233,8 @@ def test_life_05_list_shows_live_pages_and_with_archived_the_archived_too(
         "expired",
         "archived",
         "starred",
+        "pinned",  # a pool's page can be pinned (POOL-04)
+        "updated_by",  # and names the session that changed it last (POOL-06)
     }
     assert (live[0]["kind"], live[0]["set_by"]) == ("single-use", "agent")
     assert live[0]["archived"] is None and live[0]["expired"] is False

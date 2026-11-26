@@ -306,6 +306,8 @@ class HubClient:
         """Raise for a listener that is not the owner's hub (SEC-13)."""
         if state == "foreign":
             raise self._port_in_use()
+        if state == "busy":
+            raise self._not_answering()
         if state == "unproven":
             raise CliError(
                 "unauthorised",
@@ -349,7 +351,9 @@ class HubClient:
 
     def _probe(self) -> str:
         """
-        Return ``ok``, ``absent`` (refused), ``foreign`` or ``unproven``.
+        Return ``ok``, ``absent`` (refused), ``busy``, ``foreign`` or ``unproven``.
+
+        ``busy`` holds the port without answering in time: a hub still starting.
 
         ``ok`` is an agent-canvas hub that answered the challenge with the
         proof of the key in the state dir (SEC-13); ``unproven`` claims to be
@@ -365,6 +369,8 @@ class HubClient:
             data = json.loads(response.read().decode("utf-8", "replace"))
         except ConnectionRefusedError:
             return "absent"
+        except TimeoutError:
+            return "busy"
         except (OSError, http.client.HTTPException, ValueError):
             return "foreign"
         finally:
@@ -417,12 +423,16 @@ class HubClient:
         if not service.start_enabled_service():
             process = self._spawn_detached(log)
         deadline = time.monotonic() + START_WAIT_SECONDS
+        state = "absent"
         while time.monotonic() < deadline:
-            if self._probe() == "ok":
+            state = self._probe()
+            if state == "ok":
                 return
             if process is not None and process.poll() is not None:
                 break
             time.sleep(POLL_INTERVAL_SECONDS)
+        if state == "busy":
+            raise self._not_answering()
         port = self.config.port
         where = log if process is not None else "`journalctl --user -u agent-canvas`"
         raise CliError(
@@ -452,6 +462,15 @@ class HubClient:
             "hub-unreachable",
             f"Port {port} is in use by another program (it is not an "
             "agent-canvas hub). Set AGENT_CANVAS_PORT or the port in config.toml.",
+        )
+
+    def _not_answering(self) -> CliError:
+        return CliError(
+            "hub-unreachable",
+            f"The hub on port {self.config.port} does not answer yet: it may still "
+            "be starting (the first start moves old pages into project pools; see "
+            f"{self.state_dir / 'hub.log'}), or another program holds the port. "
+            "Try again in a minute.",
         )
 
     def _read_key(self) -> str:

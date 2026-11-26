@@ -96,8 +96,8 @@ class Studio:
         directory = self.tmp_path / name
         directory.mkdir(exist_ok=True)
         body = {"project": str(directory), "agent": "claude", "title": name}
-        sid = call(self.owner, "POST", "/api/sessions", json=body)["session"]
-        folder = self.owner.hub.state.session_of(sid).folder
+        started = call(self.owner, "POST", "/api/sessions", json=body)
+        sid, folder = started["session"], Path(started["folder"])  # the pool, POOL-01
         self.folder = folder
         for filename, content in (files or {}).items():
             data = content.encode() if isinstance(content, str) else content
@@ -148,7 +148,7 @@ class Studio:
 
     def events(self, sid: str) -> list[dict]:
         """All events of a session."""
-        return self.owner.hub.on_loop(lambda: self.owner.hub.state.events.all(sid))
+        return card_events(self.owner.hub, sid)
 
     def wait_events(self, sid: str, count: int, timeout: float = 15) -> list[dict]:
         """Wait for ``count`` events and return all of them."""
@@ -167,6 +167,18 @@ class Studio:
         """The stored PNG of a ``send`` event."""
         assert event["screenshot"], event
         return Path(event["screenshot"]).read_bytes()
+
+
+def card_events(hub, sid: str) -> list[dict]:  # noqa: ANN001
+    """All events of a card: its own log, then the pool's events for it (POOL-05)."""
+
+    def collect() -> list[dict]:
+        events = hub.state.events
+        pool = hub.app.state.registry.pool_of(sid)
+        pooled = [e for e in events.all(pool) if e.get("for") == sid] if pool else []
+        return events.all(sid) + pooled
+
+    return hub.on_loop(collect)
 
 
 def block(tag: str, canvas_id: str, config: dict | str, extra: str = "") -> str:
@@ -191,7 +203,7 @@ class Made:
     @property
     def events(self) -> list[dict]:
         """All events of the session."""
-        return self.owner.hub.on_loop(lambda: self.owner.hub.state.events.all(self.sid))
+        return card_events(self.owner.hub, self.sid)
 
     def wait_events(self, count: int) -> list[dict]:
         """Wait for ``count`` events and return all of them."""

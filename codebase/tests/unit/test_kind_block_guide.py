@@ -67,7 +67,7 @@ LONG_JOB_ENTRIES = {
         "5 lines",
         "stop",
         "Stop the run?",
-        "session folder",
+        "page folder",
     ],
 }
 

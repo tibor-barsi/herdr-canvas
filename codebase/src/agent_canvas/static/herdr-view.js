@@ -121,7 +121,11 @@ const HerdrView = (() => {
       else folded.delete(name);
       localStorage.setItem('hv.folded', JSON.stringify([...folded]));
     }
-    const pagesIn = (ids) => ids.reduce((n, id) => n + (sessions.get(id)?.pages.length || 0), 0);
+    // A page of a project's pool counts once, however many of its sessions list it (POOL-03).
+    const pagesIn = (ids) => new Set(ids.flatMap((id) => {
+      const s = sessions.get(id);
+      return (s?.pages || []).map((page) => `${s.pool || s.id}\n${page}`);
+    })).size;
     const sessionIds = (panes) => panes.map((p) => p.session).filter((id) => id && sessions.has(id));
 
     function normalize() {
@@ -256,6 +260,7 @@ const HerdrView = (() => {
       for (const page of session.pages) {
         const pt = h('span', 'hv-pt' + (page === shown ? ' on' : ''), pageName(page));
         pt.title = page;
+        if ((session.pinned || []).includes(page)) pt.prepend(icon('hv-pin')); // an older canvas sends no `pinned`
         pt.onclick = () => {
           pages.set(session.id, { page, seen: session.active_page });
           render();
@@ -431,6 +436,14 @@ const HerdrView = (() => {
       cb.onPage?.(session.id, page);
     }
 
+    // The focused card's session and shown page, and whether the page is pinned; null without a page.
+    function shownPage() {
+      const pane = shownCards().panes.find((p) => p.terminal === sel.pane);
+      const session = sessions.get(sel.other ? sel.otherSession : pane?.session);
+      const page = session && (pages.get(session.id)?.page || session.active_page);
+      return page ? { session: session.id, page, pinned: (session.pinned || []).includes(page) } : null;
+    }
+
     // A press inside a card's page frame never reaches this document; the window
     // loses focus to the frame instead.
     function onBlur() {
@@ -450,6 +463,7 @@ const HerdrView = (() => {
       goTab,
       goPane,
       goPage,
+      shownPage,
       destroy() {
         window.removeEventListener('blur', onBlur);
         root.replaceChildren();

@@ -8,6 +8,7 @@ import subprocess
 import sys
 import threading
 import time
+from pathlib import Path
 
 import pytest
 
@@ -96,7 +97,7 @@ def test_cli_01_output_shapes_of_the_session_commands(cli, hub) -> None:  # noqa
     started = cli("session", "start", "--title", "T").json
     sid = started["session"]
     s = ["--session", sid]
-    (cli.cwd / ".agent-canvas" / sid / "page.html").write_text("<p>x</p>")
+    (Path(started["folder"]) / "page.html").write_text("<p>x</p>")  # the pool's
     results = {
         "status": cli("status"),
         "open": cli("open"),
